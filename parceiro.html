@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parceiro · PetHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700;800&family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" />
+  <link rel="stylesheet" href="css/style.css?v=5" />
+</head>
+<body>
+  <header class="topbar" id="navbar"></header>
+
+  <main>
+    <div id="cabecalho-parceiro" class="card" style="margin-bottom:20px;">
+      <p class="empty-state">Carregando parceiro...</p>
+    </div>
+
+    <div class="grid grid-2" style="align-items:start;">
+      <div>
+        <h2>Produtos e serviços</h2>
+        <div id="lista-itens" class="grid" style="grid-template-columns: 1fr;"></div>
+      </div>
+
+      <div>
+        <div class="card" id="box-pedido" style="display:none;">
+          <h3 id="pedido-titulo">Fazer pedido</h3>
+          <div id="pedido-campos-produto" style="display:none;">
+            <label for="qtd">Quantidade</label>
+            <input type="number" id="qtd" min="1" value="1" />
+            <label for="endereco">Endereço de entrega</label>
+            <textarea id="endereco" placeholder="Rua, número, bairro"></textarea>
+          </div>
+          <div id="pedido-campos-servico" style="display:none;">
+            <label for="pet-select">Pet</label>
+            <select id="pet-select"></select>
+            <label for="horario">Data e horário desejado</label>
+            <input type="datetime-local" id="horario" />
+          </div>
+          <p style="margin-top:14px;">Total estimado: <strong id="pedido-total">R$ 0,00</strong></p>
+          <p class="center-note" style="margin-top:0;">O pedido é enviado a todos os parceiros da região com esse item disponível; o primeiro a aceitar atende.</p>
+          <button class="btn btn-primary btn-block" id="btn-confirmar-pedido">Confirmar</button>
+          <button class="btn btn-ghost btn-block" id="btn-cancelar-pedido">Cancelar</button>
+        </div>
+
+        <div class="card" id="box-avaliacoes" style="margin-top:16px;">
+          <h3>Avaliações</h3>
+          <div id="lista-avaliacoes"><p class="empty-state">Sem avaliações ainda.</p></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="js/supabase-client.js"></script>
+  <script src="js/app.js?v=3"></script>
+  <script>
+    renderNavbar("catalogo");
+
+    const params = new URLSearchParams(window.location.search);
+    const parceiroId = params.get("id");
+    let parceiro = null;
+    let itemSelecionado = null;
+
+    if (!parceiroId) {
+      window.location.href = "catalogo.html";
+    }
+
+    async function carregarParceiro() {
+      if (!window.sb) {
+        document.getElementById("cabecalho-parceiro").innerHTML =
+          `<p class="empty-state">Não foi possível conectar ao Supabase (SDK não carregou). Verifique sua internet ou o config.js.</p>`;
+        return;
+      }
+      const { data, error } = await window.sb.from("parceiros").select("*").eq("id", parceiroId).maybeSingle();
+      if (error || !data) {
+        document.getElementById("cabecalho-parceiro").innerHTML = `<p class="empty-state">Parceiro não encontrado.</p>`;
+        return;
+      }
+      parceiro = data;
+      document.getElementById("cabecalho-parceiro").innerHTML = `
+        <h1 style="margin:0 0 6px;">${parceiro.nome_fantasia}</h1>
+        <div class="partner-meta" style="margin-bottom:8px;">
+          <span class="badge">${TIPO_NEGOCIO_LABELS[parceiro.tipo_negocio] || parceiro.tipo_negocio}</span>
+          ${parceiro.verificado ? `<span class="badge verificado">${ICONS.check} Verificado</span>` : ""}
+          ${ratingLabel(parceiro.nota_media, parceiro.total_avaliacoes)}
+        </div>
+        <p style="margin:0 0 6px; color:var(--ink-soft);">${parceiro.descricao || ""}</p>
+        <p style="margin:0; color:var(--ink-soft);">${ICONS.pin} ${parceiro.bairro || ""}, ${parceiro.cidade}</p>
+      `;
+    }
+
+    async function carregarItens() {
+      if (!window.sb) return;
+      const { data, error } = await window.sb
+        .from("itens")
+        .select("*")
+        .eq("parceiro_id", parceiroId)
+        .eq("disponivel", true)
+        .order("tipo");
+
+      const el = document.getElementById("lista-itens");
+      if (error || !data || !data.length) {
+        el.innerHTML = `<p class="empty-state">Este parceiro ainda não cadastrou itens.</p>`;
+        return;
+      }
+      el.innerHTML = data.map((item) => `
+        <div class="card item-card">
+          <div class="partner-meta">
+            <span class="badge">${item.tipo === "produto" ? "Produto" : "Serviço"}</span>
+            <span>${ICONS.clock} ${item.tipo === "produto" ? "Entrega em até " + item.prazo_horas + "h" : "Duração ~" + item.prazo_horas + "h"}</span>
+          </div>
+          <h4 style="margin:4px 0;">${item.nome}</h4>
+          <p style="margin:0; color:var(--ink-soft); font-size:0.9rem;">${item.descricao || ""}</p>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+            <span class="price">${formatMoney(item.preco)}</span>
+            <button class="btn btn-primary btn-pedir" data-id="${item.id}" data-tipo="${item.tipo}" data-nome="${item.nome}" data-preco="${item.preco}">
+              ${item.tipo === "produto" ? "Pedir" : "Agendar"}
+            </button>
+          </div>
+        </div>
+      `).join("");
+
+      document.querySelectorAll(".btn-pedir").forEach((btn) => {
+        btn.addEventListener("click", () => abrirBoxPedido(btn.dataset));
+      });
+    }
+
+    async function carregarAvaliacoes() {
+      if (!window.sb) return;
+      const { data, error } = await window.sb
+        .from("pedidos")
+        .select("id, avaliacoes(nota, comentario, created_at)")
+        .eq("parceiro_id", parceiroId)
+        .not("avaliacoes", "is", null);
+
+      const el = document.getElementById("lista-avaliacoes");
+      const avals = (data || []).flatMap((p) => p.avaliacoes || []);
+      if (error || !avals.length) {
+        el.innerHTML = `<p class="empty-state">Sem avaliações ainda.</p>`;
+        return;
+      }
+      el.innerHTML = avals.map((a) => `
+        <div style="border-bottom:1px solid #f5e9d6; padding:10px 0;">
+          <div class="stars">${starString(a.nota)}</div>
+          <p style="margin:4px 0 0; font-size:0.9rem;">${a.comentario || ""}</p>
+          <p style="margin:2px 0 0; font-size:0.75rem; color:var(--ink-soft);">${formatDate(a.created_at)}</p>
+        </div>
+      `).join("");
+    }
+
+    async function abrirBoxPedido(dataset) {
+      const profile = await getCurrentProfile();
+      if (!profile) {
+        window.location.href = "auth.html";
+        return;
+      }
+      if (profile.tipo !== "tutor") {
+        showToast("Só tutores podem fazer pedidos.", "error");
+        return;
+      }
+
+      itemSelecionado = { id: dataset.id, tipo: dataset.tipo, nome: dataset.nome, preco: Number(dataset.preco) };
+
+      document.getElementById("box-pedido").style.display = "block";
+      document.getElementById("pedido-titulo").textContent =
+        itemSelecionado.tipo === "produto" ? "Pedir: " + itemSelecionado.nome : "Agendar: " + itemSelecionado.nome;
+
+      document.getElementById("pedido-campos-produto").style.display = itemSelecionado.tipo === "produto" ? "block" : "none";
+      document.getElementById("pedido-campos-servico").style.display = itemSelecionado.tipo === "servico" ? "block" : "none";
+
+      atualizarTotal();
+
+      if (itemSelecionado.tipo === "servico") {
+        const { data: pets } = await window.sb.from("pets").select("id, nome").eq("tutor_id", profile.id);
+        const select = document.getElementById("pet-select");
+        select.innerHTML = (pets || []).map((p) => `<option value="${p.id}">${p.nome}</option>`).join("")
+          || `<option value="">Cadastre um pet no seu perfil primeiro</option>`;
+      }
+
+      document.getElementById("box-pedido").scrollIntoView({ behavior: "smooth" });
+    }
+
+    function atualizarTotal() {
+      if (!itemSelecionado) return;
+      const qtd = itemSelecionado.tipo === "produto" ? Number(document.getElementById("qtd").value || 1) : 1;
+      document.getElementById("pedido-total").textContent = formatMoney(itemSelecionado.preco * qtd);
+    }
+    document.getElementById("qtd").addEventListener("input", atualizarTotal);
+
+    document.getElementById("btn-cancelar-pedido").addEventListener("click", () => {
+      document.getElementById("box-pedido").style.display = "none";
+      itemSelecionado = null;
+    });
+
+    document.getElementById("btn-confirmar-pedido").addEventListener("click", async () => {
+      const profile = await getCurrentProfile();
+      if (!profile || !itemSelecionado) return;
+
+      const payload = {
+        tutor_id: profile.id,
+        tipo: itemSelecionado.tipo,
+        nome_item: itemSelecionado.nome,
+        preco_referencia: itemSelecionado.preco,
+        status: "pendente"
+      };
+
+      if (itemSelecionado.tipo === "produto") {
+        const qtd = Number(document.getElementById("qtd").value || 1);
+        const endereco = document.getElementById("endereco").value.trim();
+        if (!endereco) {
+          showToast("Informe o endereço de entrega.", "error");
+          return;
+        }
+        payload.quantidade = qtd;
+        payload.endereco_entrega = endereco;
+      } else {
+        const petId = document.getElementById("pet-select").value;
+        const horario = document.getElementById("horario").value;
+        if (!petId) {
+          showToast("Cadastre e selecione um pet antes de agendar.", "error");
+          return;
+        }
+        if (!horario) {
+          showToast("Escolha a data e o horário.", "error");
+          return;
+        }
+        payload.pet_id = petId;
+        payload.horario_agendado = new Date(horario).toISOString();
+      }
+
+      // Cria o pedido "em aberto" (sem parceiro definido ainda).
+      const { data: pedido, error } = await window.sb.from("pedidos").insert(payload).select().single();
+      if (error) {
+        showToast("Erro ao confirmar: " + error.message, "error");
+        return;
+      }
+
+      // Acha todos os parceiros do mesmo tipo de negócio e bairro com esse item disponível,
+      // e os notifica (broadcast); quem aceitar primeiro fica com o pedido.
+      const { data: candidatos, error: candidatosError } = await window.sb
+        .from("parceiros")
+        .select("id, itens!inner(id, nome, disponivel, tipo)")
+        .eq("tipo_negocio", parceiro.tipo_negocio)
+        .eq("bairro", parceiro.bairro)
+        .eq("itens.disponivel", true)
+        .eq("itens.tipo", itemSelecionado.tipo)
+        .ilike("itens.nome", itemSelecionado.nome);
+
+      if (candidatosError || !candidatos || !candidatos.length) {
+        showToast("Pedido criado, mas nenhum parceiro elegível foi encontrado no momento.", "error");
+        setTimeout(() => (window.location.href = "meus-pedidos.html"), 900);
+        return;
+      }
+
+      const linhasCandidatos = candidatos.map((p) => ({
+        pedido_id: pedido.id,
+        parceiro_id: p.id,
+        item_id: p.itens[0].id
+      }));
+      const { error: insertCandidatosError } = await window.sb.from("pedido_candidatos").insert(linhasCandidatos);
+      if (insertCandidatosError) {
+        showToast("Erro ao notificar parceiros: " + insertCandidatosError.message, "error");
+        return;
+      }
+
+      showToast(`Pedido enviado a ${linhasCandidatos.length} parceiro(s) da região!`, "success");
+      setTimeout(() => (window.location.href = "meus-pedidos.html"), 900);
+    });
+
+    carregarParceiro();
+    carregarItens();
+    carregarAvaliacoes();
+  </script>
+</body>
+</html>

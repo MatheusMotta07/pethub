@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meus pedidos · PetHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700;800&family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" />
+  <link rel="stylesheet" href="css/style.css?v=5" />
+</head>
+<body>
+  <header class="topbar" id="navbar"></header>
+
+  <main>
+    <div class="page-header">
+      <h1>Meus pedidos</h1>
+      <p>Acompanhe o status dos seus pedidos e agendamentos.</p>
+    </div>
+
+    <div class="card" id="box-pedidos">
+      <p class="empty-state">Carregando pedidos...</p>
+    </div>
+
+    <div class="card" id="box-avaliar" style="display:none; margin-top:16px;">
+      <h3>Avaliar pedido</h3>
+      <input type="hidden" id="avaliar-pedido-id" />
+      <label for="avaliar-nota">Nota (1 a 5)</label>
+      <select id="avaliar-nota">
+        <option value="5">5 - Excelente</option>
+        <option value="4">4 - Muito bom</option>
+        <option value="3">3 - Bom</option>
+        <option value="2">2 - Regular</option>
+        <option value="1">1 - Ruim</option>
+      </select>
+      <label for="avaliar-comentario">Comentário</label>
+      <textarea id="avaliar-comentario" placeholder="Como foi o atendimento?"></textarea>
+      <button class="btn btn-primary" id="btn-enviar-avaliacao" style="margin-top:10px;">Enviar avaliação</button>
+      <button class="btn btn-ghost" id="btn-cancelar-avaliacao">Cancelar</button>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="js/supabase-client.js"></script>
+  <script src="js/app.js?v=3"></script>
+  <script>
+    renderNavbar("pedidos");
+
+    async function init() {
+      const profile = await requireAuth("tutor");
+      if (!profile) return;
+      await carregarPedidos(profile.id);
+    }
+
+    async function carregarPedidos(tutorId) {
+      const { data, error } = await window.sb
+        .from("pedidos")
+        .select("*, parceiros(nome_fantasia), itens(nome), pets(nome), avaliacoes(id)")
+        .eq("tutor_id", tutorId)
+        .order("created_at", { ascending: false });
+
+      const el = document.getElementById("box-pedidos");
+      if (error) {
+        el.innerHTML = `<p class="empty-state">Erro ao carregar pedidos.</p>`;
+        console.error(error);
+        return;
+      }
+      if (!data || !data.length) {
+        el.innerHTML = `<p class="empty-state">Você ainda não fez nenhum pedido. <a href="catalogo.html">Explorar catálogo</a></p>`;
+        return;
+      }
+
+      el.innerHTML = data.map((p) => `
+        <div class="pedido-row">
+          <div>
+            <strong>${p.itens ? p.itens.nome : p.nome_item}</strong>
+            <div style="font-size:0.85rem; color:var(--ink-soft);">
+              ${p.parceiros ? p.parceiros.nome_fantasia : "Procurando parceiro disponível..."}
+              ${p.tipo === "servico" ? " · " + (p.pets ? p.pets.nome : "-") + " · " + formatDateTime(p.horario_agendado) : ""}
+              ${p.tipo === "produto" ? " · qtd " + p.quantidade : ""}
+              · ${p.valor_total != null ? formatMoney(p.valor_total) : "~" + formatMoney(p.preco_referencia)}
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span class="badge ${p.status}">${STATUS_LABELS[p.status] || p.status}</span>
+            ${p.status === "concluido" ? `<button class="btn btn-secondary btn-avaliar" data-id="${p.id}">Avaliar</button>` : ""}
+          </div>
+        </div>
+      `).join("");
+
+      document.querySelectorAll(".btn-avaliar").forEach((btn) => {
+        btn.addEventListener("click", () => abrirAvaliacao(btn.dataset.id));
+      });
+    }
+
+    function abrirAvaliacao(pedidoId) {
+      document.getElementById("avaliar-pedido-id").value = pedidoId;
+      document.getElementById("box-avaliar").style.display = "block";
+      document.getElementById("box-avaliar").scrollIntoView({ behavior: "smooth" });
+    }
+
+    document.getElementById("btn-cancelar-avaliacao").addEventListener("click", () => {
+      document.getElementById("box-avaliar").style.display = "none";
+    });
+
+    document.getElementById("btn-enviar-avaliacao").addEventListener("click", async () => {
+      const pedidoId = document.getElementById("avaliar-pedido-id").value;
+      const nota = Number(document.getElementById("avaliar-nota").value);
+      const comentario = document.getElementById("avaliar-comentario").value.trim();
+
+      const { error } = await window.sb.from("avaliacoes").insert({ pedido_id: pedidoId, nota, comentario });
+      if (error) {
+        showToast("Erro ao enviar avaliação: " + error.message, "error");
+        return;
+      }
+      showToast("Avaliação enviada. Obrigado!", "success");
+      document.getElementById("box-avaliar").style.display = "none";
+      const profile = await getCurrentProfile();
+      carregarPedidos(profile.id);
+    });
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meu perfil · PetHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700;800&family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" />
+  <link rel="stylesheet" href="css/style.css?v=5" />
+</head>
+<body>
+  <header class="topbar" id="navbar"></header>
+
+  <main>
+    <div class="page-header">
+      <h1>Meu perfil</h1>
+      <p>Seus dados e, se você for tutor, o perfil dos seus pets.</p>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;">
+      <h3>Dados pessoais</h3>
+      <form id="form-perfil">
+        <div class="field-row">
+          <div>
+            <label for="p-nome">Nome</label>
+            <input type="text" id="p-nome" required />
+          </div>
+          <div>
+            <label for="p-telefone">Telefone</label>
+            <input type="tel" id="p-telefone" />
+          </div>
+        </div>
+        <label for="p-bairro">Bairro</label>
+        <input type="text" id="p-bairro" required />
+        <button type="submit" class="btn btn-primary" style="margin-top:12px;">Salvar</button>
+      </form>
+    </div>
+
+    <div class="card" id="box-negocio" style="display:none; margin-bottom:20px;">
+      <h3>Dados do negócio</h3>
+      <form id="form-negocio">
+        <label for="n-fantasia">Nome fantasia</label>
+        <input type="text" id="n-fantasia" required />
+        <label for="n-descricao">Descrição</label>
+        <textarea id="n-descricao"></textarea>
+        <p class="center-note" id="status-verificacao"></p>
+        <button type="submit" class="btn btn-primary" style="margin-top:12px;">Salvar</button>
+      </form>
+    </div>
+
+    <div class="card" id="box-pets" style="display:none;">
+      <h3>Meus pets</h3>
+      <div id="lista-pets"></div>
+
+      <hr style="border-color:#f5e9d6; margin:16px 0;" />
+      <h4>Adicionar pet</h4>
+      <form id="form-pet">
+        <div class="field-row">
+          <div>
+            <label for="pet-nome">Nome</label>
+            <input type="text" id="pet-nome" required />
+          </div>
+          <div>
+            <label for="pet-especie">Espécie</label>
+            <select id="pet-especie">
+              <option value="cachorro">Cachorro</option>
+              <option value="gato">Gato</option>
+              <option value="outro">Outro</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div>
+            <label for="pet-raca">Raça</label>
+            <input type="text" id="pet-raca" />
+          </div>
+          <div>
+            <label for="pet-nascimento">Data de nascimento</label>
+            <input type="date" id="pet-nascimento" />
+          </div>
+        </div>
+        <label for="pet-vacinas">Vacinas</label>
+        <textarea id="pet-vacinas" placeholder="Ex: V10 em 10/2026, antirrábica em 11/2026"></textarea>
+        <label for="pet-alergias">Alergias</label>
+        <textarea id="pet-alergias" placeholder="Ex: alergia a frango"></textarea>
+        <label for="pet-rotina">Rotina</label>
+        <textarea id="pet-rotina" placeholder="Ex: passeio 2x ao dia, ração às 8h e 18h"></textarea>
+        <button type="submit" class="btn btn-primary btn-block" style="margin-top:12px;">Adicionar pet</button>
+      </form>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="js/supabase-client.js"></script>
+  <script src="js/app.js?v=3"></script>
+  <script>
+    renderNavbar("perfil");
+    let profile = null;
+    let parceiro = null;
+
+    async function init() {
+      profile = await requireAuth();
+      if (!profile) return;
+
+      document.getElementById("p-nome").value = profile.nome || "";
+      document.getElementById("p-telefone").value = profile.telefone || "";
+      document.getElementById("p-bairro").value = profile.bairro || "";
+
+      if (profile.tipo === "tutor") {
+        document.getElementById("box-pets").style.display = "block";
+        carregarPets();
+      } else {
+        document.getElementById("box-negocio").style.display = "block";
+        const { data } = await window.sb.from("parceiros").select("*").eq("profile_id", profile.id).maybeSingle();
+        parceiro = data;
+        if (parceiro) {
+          document.getElementById("n-fantasia").value = parceiro.nome_fantasia || "";
+          document.getElementById("n-descricao").value = parceiro.descricao || "";
+          document.getElementById("status-verificacao").textContent = parceiro.verificado
+            ? "Cadastro verificado (CNPJ/CRMV)."
+            : "Cadastro em análise de verificação (CNPJ/CRMV).";
+        }
+      }
+    }
+
+    document.getElementById("form-perfil").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const { error } = await window.sb.from("profiles").update({
+        nome: document.getElementById("p-nome").value.trim(),
+        telefone: document.getElementById("p-telefone").value.trim(),
+        bairro: document.getElementById("p-bairro").value.trim()
+      }).eq("id", profile.id);
+      if (error) {
+        showToast("Erro ao salvar: " + error.message, "error");
+        return;
+      }
+      showToast("Perfil atualizado!", "success");
+    });
+
+    document.getElementById("form-negocio").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!parceiro) return;
+      const { error } = await window.sb.from("parceiros").update({
+        nome_fantasia: document.getElementById("n-fantasia").value.trim(),
+        descricao: document.getElementById("n-descricao").value.trim()
+      }).eq("id", parceiro.id);
+      if (error) {
+        showToast("Erro ao salvar: " + error.message, "error");
+        return;
+      }
+      showToast("Dados do negócio atualizados!", "success");
+    });
+
+    async function carregarPets() {
+      const { data, error } = await window.sb.from("pets").select("*").eq("tutor_id", profile.id).order("created_at");
+      const el = document.getElementById("lista-pets");
+      if (error || !data || !data.length) {
+        el.innerHTML = `<p class="empty-state">Nenhum pet cadastrado ainda.</p>`;
+        return;
+      }
+      el.innerHTML = data.map((pet) => `
+        <div class="card" style="margin-bottom:10px;">
+          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div>
+              <h4 style="margin:0 0 4px;">${pet.nome} <span class="badge">${pet.especie}</span></h4>
+              <p style="margin:0; font-size:0.85rem; color:var(--ink-soft);">${pet.raca || ""} ${pet.data_nascimento ? "· nasc. " + formatDate(pet.data_nascimento) : ""}</p>
+              ${pet.vacinas ? `<p style="margin:6px 0 0; font-size:0.85rem;"><strong>Vacinas:</strong> ${pet.vacinas}</p>` : ""}
+              ${pet.alergias ? `<p style="margin:2px 0 0; font-size:0.85rem;"><strong>Alergias:</strong> ${pet.alergias}</p>` : ""}
+              ${pet.rotina ? `<p style="margin:2px 0 0; font-size:0.85rem;"><strong>Rotina:</strong> ${pet.rotina}</p>` : ""}
+            </div>
+            <button class="btn btn-danger btn-excluir-pet" data-id="${pet.id}">Excluir</button>
+          </div>
+        </div>
+      `).join("");
+
+      document.querySelectorAll(".btn-excluir-pet").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          if (!confirm("Excluir este pet?")) return;
+          await window.sb.from("pets").delete().eq("id", btn.dataset.id);
+          carregarPets();
+        });
+      });
+    }
+
+    document.getElementById("form-pet").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const payload = {
+        tutor_id: profile.id,
+        nome: document.getElementById("pet-nome").value.trim(),
+        especie: document.getElementById("pet-especie").value,
+        raca: document.getElementById("pet-raca").value.trim(),
+        data_nascimento: document.getElementById("pet-nascimento").value || null,
+        vacinas: document.getElementById("pet-vacinas").value.trim(),
+        alergias: document.getElementById("pet-alergias").value.trim(),
+        rotina: document.getElementById("pet-rotina").value.trim()
+      };
+      const { error } = await window.sb.from("pets").insert(payload);
+      if (error) {
+        showToast("Erro ao adicionar pet: " + error.message, "error");
+        return;
+      }
+      showToast("Pet cadastrado!", "success");
+      e.target.reset();
+      carregarPets();
+    });
+
+    init();
+  </script>
+</body>
+</html>

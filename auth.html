@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Entrar · PetHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700;800&family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" />
+  <link rel="stylesheet" href="css/style.css?v=5" />
+</head>
+<body>
+  <header class="topbar" id="navbar"></header>
+
+  <main>
+    <div class="pet-carousel" id="pet-carousel-auth" style="max-width:420px; margin:0 auto 4px;"></div>
+
+    <div class="card auth-card">
+      <div class="toggle-group">
+        <button id="tab-login" class="active">Entrar</button>
+        <button id="tab-signup">Criar conta</button>
+      </div>
+
+      <!-- LOGIN -->
+      <form id="form-login">
+        <label for="login-email">E-mail</label>
+        <input type="email" id="login-email" required />
+        <label for="login-senha">Senha</label>
+        <input type="password" id="login-senha" required minlength="6" />
+        <button type="submit" class="btn btn-primary btn-block" style="margin-top:18px;">Entrar</button>
+      </form>
+
+      <!-- SIGNUP -->
+      <form id="form-signup" style="display:none;">
+        <label>Eu sou:</label>
+        <div class="toggle-group" style="margin-bottom:4px;">
+          <button type="button" id="tipo-tutor" class="active">Tutor de pet</button>
+          <button type="button" id="tipo-parceiro">Parceiro</button>
+        </div>
+
+        <label for="signup-nome" id="label-nome">Seu nome</label>
+        <input type="text" id="signup-nome" required />
+
+        <div class="field-row">
+          <div>
+            <label for="signup-email">E-mail</label>
+            <input type="email" id="signup-email" required />
+          </div>
+          <div>
+            <label for="signup-telefone">Telefone</label>
+            <input type="tel" id="signup-telefone" placeholder="(47) 9xxxx-xxxx" />
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div>
+            <label for="signup-bairro">Bairro (Joinville)</label>
+            <input type="text" id="signup-bairro" required placeholder="Ex: América" />
+          </div>
+          <div>
+            <label for="signup-senha">Senha</label>
+            <input type="password" id="signup-senha" required minlength="6" />
+          </div>
+        </div>
+
+        <!-- Campos extras só para parceiro -->
+        <div id="campos-parceiro" style="display:none;">
+          <label for="signup-negocio">Tipo de negócio</label>
+          <select id="signup-negocio">
+            <option value="pet_shop">Pet shop</option>
+            <option value="veterinario">Veterinário</option>
+            <option value="hospedagem">Hospedagem</option>
+            <option value="cuidador">Cuidador</option>
+          </select>
+          <label for="signup-fantasia">Nome fantasia</label>
+          <input type="text" id="signup-fantasia" placeholder="Ex: Pet Shop Amigo Fiel" />
+          <label for="signup-documento">CNPJ (pet shop) ou CRMV (veterinário)</label>
+          <input type="text" id="signup-documento" placeholder="00.000.000/0001-00" />
+          <label for="signup-descricao">Descrição curta</label>
+          <textarea id="signup-descricao" placeholder="Conte o que seu negócio oferece"></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block" style="margin-top:18px;">Criar conta</button>
+      </form>
+
+      <p class="center-note">Protótipo acadêmico: não use CPF, senhas ou dados reais.</p>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="js/supabase-client.js"></script>
+  <script src="js/app.js?v=3"></script>
+  <script>
+    renderNavbar();
+    renderPetCarousel("pet-carousel-auth");
+
+    const tabLogin = document.getElementById("tab-login");
+    const tabSignup = document.getElementById("tab-signup");
+    const formLogin = document.getElementById("form-login");
+    const formSignup = document.getElementById("form-signup");
+
+    function showLogin() {
+      tabLogin.classList.add("active");
+      tabSignup.classList.remove("active");
+      formLogin.style.display = "block";
+      formSignup.style.display = "none";
+    }
+    function showSignup() {
+      tabSignup.classList.add("active");
+      tabLogin.classList.remove("active");
+      formSignup.style.display = "block";
+      formLogin.style.display = "none";
+    }
+    tabLogin.addEventListener("click", showLogin);
+    tabSignup.addEventListener("click", showSignup);
+
+    // Se veio de "Quero ser parceiro", abre direto na aba de cadastro como parceiro.
+    const params = new URLSearchParams(window.location.search);
+    let tipoConta = "tutor";
+
+    const tipoTutorBtn = document.getElementById("tipo-tutor");
+    const tipoParceiroBtn = document.getElementById("tipo-parceiro");
+    const camposParceiro = document.getElementById("campos-parceiro");
+    const labelNome = document.getElementById("label-nome");
+
+    function setTipoConta(tipo) {
+      tipoConta = tipo;
+      tipoTutorBtn.classList.toggle("active", tipo === "tutor");
+      tipoParceiroBtn.classList.toggle("active", tipo === "parceiro");
+      camposParceiro.style.display = tipo === "parceiro" ? "block" : "none";
+      labelNome.textContent = tipo === "parceiro" ? "Seu nome (responsável)" : "Seu nome";
+    }
+    tipoTutorBtn.addEventListener("click", () => setTipoConta("tutor"));
+    tipoParceiroBtn.addEventListener("click", () => setTipoConta("parceiro"));
+
+    if (params.get("tipo") === "parceiro") {
+      showSignup();
+      setTipoConta("parceiro");
+    }
+
+    formLogin.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("login-email").value.trim();
+      const senha = document.getElementById("login-senha").value;
+      const { error } = await window.sb.auth.signInWithPassword({ email, password: senha });
+      if (error) {
+        showToast(error.message, "error");
+        return;
+      }
+      const profile = await getCurrentProfile();
+      window.location.href = profile && profile.tipo === "parceiro" ? "painel.html" : "catalogo.html";
+    });
+
+    formSignup.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("signup-email").value.trim();
+      const senha = document.getElementById("signup-senha").value;
+      const nome = document.getElementById("signup-nome").value.trim();
+      const telefone = document.getElementById("signup-telefone").value.trim();
+      const bairro = document.getElementById("signup-bairro").value.trim();
+
+      const { data, error } = await window.sb.auth.signUp({ email, password: senha });
+      if (error) {
+        showToast(error.message, "error");
+        return;
+      }
+      const userId = data.user ? data.user.id : null;
+      if (!userId) {
+        showToast("Verifique seu e-mail para confirmar o cadastro.", "success");
+        return;
+      }
+
+      const { error: profileError } = await window.sb.from("profiles").insert({
+        id: userId,
+        tipo: tipoConta,
+        nome,
+        telefone,
+        bairro,
+        cidade: "Joinville"
+      });
+      if (profileError) {
+        showToast("Erro ao criar perfil: " + profileError.message, "error");
+        return;
+      }
+
+      if (tipoConta === "parceiro") {
+        const { error: parceiroError } = await window.sb.from("parceiros").insert({
+          profile_id: userId,
+          tipo_negocio: document.getElementById("signup-negocio").value,
+          nome_fantasia: document.getElementById("signup-fantasia").value.trim() || nome,
+          documento: document.getElementById("signup-documento").value.trim() || "pendente",
+          descricao: document.getElementById("signup-descricao").value.trim(),
+          bairro,
+          cidade: "Joinville"
+        });
+        if (parceiroError) {
+          showToast("Erro ao criar cadastro de parceiro: " + parceiroError.message, "error");
+          return;
+        }
+        showToast("Conta de parceiro criada! Cadastre seus itens no painel.", "success");
+        window.location.href = "painel.html";
+        return;
+      }
+
+      showToast("Conta criada! Cadastre o perfil do seu pet.", "success");
+      window.location.href = "perfil.html";
+    });
+  </script>
+</body>
+</html>

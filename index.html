@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PetHub: Good app, happy pet!</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700;800&family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" />
+  <link rel="stylesheet" href="css/style.css?v=5" />
+</head>
+<body>
+  <header class="topbar" id="navbar"></header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <h1>Um pedido, todo o bairro de parceiros ao mesmo tempo.</h1>
+        <p>Ração, banho e tosa, veterinário, hospedagem e cuidadores em Joinville. Você faz um pedido e ele chega a todos os parceiros do seu bairro com aquele item disponível; quem aceitar primeiro, atende.</p>
+        <a href="catalogo.html" class="btn btn-primary">Explorar catálogo</a>
+      </div>
+      <div class="ticket-stack" aria-hidden="true">
+        <div class="ticket ticket-back">
+          <div class="ticket-label">Pedido #A231</div>
+          <div class="ticket-item">Banho e tosa</div>
+          <div class="ticket-meta">Bairro América</div>
+          <span class="badge">Aguardando parceiro</span>
+        </div>
+        <div class="ticket ticket-front">
+          <div class="ticket-label">Pedido #A230</div>
+          <div class="ticket-item">Ração Premium 10kg</div>
+          <div class="ticket-meta">Bairro Bucarein</div>
+          <span class="badge aceito">Aceito</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="page-header" style="border-bottom:none; margin-bottom:4px;">
+      <h2 style="font-size:1.1rem; margin-bottom:2px;">Para todo tipo de pet</h2>
+      <p>Cachorro, gato ou outro bichinho da casa: o catálogo tem parceiro pra ele.</p>
+    </div>
+    <div class="pet-carousel" id="pet-carousel-home"></div>
+
+    <div class="feature-row">
+      <div>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3.5h5.5a2 2 0 0 1 2 2V11a2 2 0 0 1-.6 1.4l-7 7a2 2 0 0 1-2.8 0l-4.5-4.5a2 2 0 0 1 0-2.8l7-7A2 2 0 0 1 11 3.5Z"/><circle cx="14.5" cy="8" r="1.4"/></svg>
+        <h3>Perfil do pet centralizado</h3>
+        <p>Vacinas, alergias e rotina cadastradas uma vez servem para qualquer parceiro que você escolher.</p>
+      </div>
+      <div>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 19 6v6c0 4.4-3 7.3-7 8.5-4-1.2-7-4.1-7-8.5V6Z"/><polyline points="8.7 12 11 14.3 15.4 9.6"/></svg>
+        <h3>Profissionais verificados</h3>
+        <p>Parceiros com CNPJ ou CRMV validado e avaliados por outros tutores da região.</p>
+      </div>
+      <div>
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.3"/><path d="M7.5 8.5a6.2 6.2 0 0 0 0 7M16.5 8.5a6.2 6.2 0 0 1 0 7M4.3 5.3a10.6 10.6 0 0 0 0 13.4M19.7 5.3a10.6 10.6 0 0 1 0 13.4"/></svg>
+        <h3>Pedido sem travar</h3>
+        <p>O pedido vai a todos os parceiros elegíveis ao mesmo tempo. Ninguém fica esperando uma resposta só.</p>
+      </div>
+    </div>
+
+    <div class="cta-strip">
+      <div>
+        <h2 style="font-size:1.25rem;">Tem um pet shop, clínica, hotel ou é cuidador?</h2>
+        <p>Cadastre-se como parceiro e receba pedidos da região sem montar uma loja virtual própria.</p>
+      </div>
+      <a href="auth.html?tipo=parceiro" class="btn btn-secondary">Quero ser parceiro</a>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="js/supabase-client.js"></script>
+  <script src="js/app.js?v=3"></script>
+  <script>
+    renderNavbar("inicio");
+    renderPetCarousel("pet-carousel-home");
+  </script>
+</body>
+</html>

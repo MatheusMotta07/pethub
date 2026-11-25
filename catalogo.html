@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Catálogo · PetHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700;800&family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" />
+  <link rel="stylesheet" href="css/style.css?v=5" />
+</head>
+<body>
+  <header class="topbar" id="navbar"></header>
+
+  <main>
+    <div class="page-header">
+      <h1>Catálogo de parceiros em Joinville</h1>
+      <p>Compare preço, prazo e avaliação antes de pedir ou agendar.</p>
+    </div>
+
+    <div class="card" style="margin-bottom:20px;">
+      <div class="field-row">
+        <div>
+          <label for="f-tipo-negocio">Tipo de negócio</label>
+          <select id="f-tipo-negocio">
+            <option value="">Todos</option>
+            <option value="pet_shop">Pet shop</option>
+            <option value="veterinario">Veterinário</option>
+            <option value="hospedagem">Hospedagem</option>
+            <option value="cuidador">Cuidador</option>
+          </select>
+        </div>
+        <div>
+          <label for="f-bairro">Bairro</label>
+          <input type="text" id="f-bairro" placeholder="Ex: América" />
+        </div>
+        <div>
+          <label for="f-busca">Buscar</label>
+          <input type="text" id="f-busca" placeholder="Nome do parceiro ou item" />
+        </div>
+        <div>
+          <label for="f-ordenar">Ordenar por</label>
+          <select id="f-ordenar">
+            <option value="nota">Melhor avaliados</option>
+            <option value="nome">Nome (A-Z)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div id="lista-parceiros" class="grid grid-3">
+      <p class="empty-state">Carregando parceiros...</p>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="js/supabase-client.js"></script>
+  <script src="js/app.js?v=3"></script>
+  <script>
+    renderNavbar("catalogo");
+
+    let todosParceiros = [];
+
+    async function carregarParceiros() {
+      if (!window.sb) {
+        document.getElementById("lista-parceiros").innerHTML =
+          `<p class="empty-state">Não foi possível conectar ao Supabase (SDK não carregou). Verifique sua internet ou o config.js.</p>`;
+        return;
+      }
+      const { data, error } = await window.sb
+        .from("parceiros")
+        .select("*, itens(count)")
+        .order("nota_media", { ascending: false });
+
+      if (error) {
+        document.getElementById("lista-parceiros").innerHTML =
+          `<p class="empty-state">Não foi possível carregar o catálogo. Verifique se o Supabase está configurado (config.js).</p>`;
+        console.error(error);
+        return;
+      }
+      todosParceiros = data || [];
+      aplicarFiltros();
+    }
+
+    function aplicarFiltros() {
+      const tipoNegocio = document.getElementById("f-tipo-negocio").value;
+      const bairro = document.getElementById("f-bairro").value.trim().toLowerCase();
+      const busca = document.getElementById("f-busca").value.trim().toLowerCase();
+      const ordenar = document.getElementById("f-ordenar").value;
+
+      let filtrados = todosParceiros.filter((p) => {
+        if (tipoNegocio && p.tipo_negocio !== tipoNegocio) return false;
+        if (bairro && !(p.bairro || "").toLowerCase().includes(bairro)) return false;
+        if (busca && !(p.nome_fantasia || "").toLowerCase().includes(busca)) return false;
+        return true;
+      });
+
+      if (ordenar === "nome") {
+        filtrados.sort((a, b) => a.nome_fantasia.localeCompare(b.nome_fantasia));
+      } else {
+        filtrados.sort((a, b) => (b.nota_media || 0) - (a.nota_media || 0));
+      }
+
+      renderParceiros(filtrados);
+    }
+
+    function renderParceiros(lista) {
+      const el = document.getElementById("lista-parceiros");
+      if (!lista.length) {
+        el.innerHTML = `<p class="empty-state">Nenhum parceiro encontrado com esses filtros.</p>`;
+        return;
+      }
+      el.innerHTML = lista.map((p) => `
+        <a class="card partner-card" data-tipo="${p.tipo_negocio}" href="parceiro.html?id=${p.id}">
+          <h3>${p.nome_fantasia}</h3>
+          <div class="partner-meta">
+            <span class="badge">${TIPO_NEGOCIO_LABELS[p.tipo_negocio] || p.tipo_negocio}</span>
+            ${p.verificado ? `<span class="badge verificado">${ICONS.check} Verificado</span>` : ""}
+          </div>
+          <p style="color:var(--ink-soft); font-size:0.9rem; margin:0;">${p.descricao || ""}</p>
+          <div class="partner-meta">
+            <span>${ICONS.pin} ${p.bairro || p.cidade}</span>
+            ${ratingLabel(p.nota_media, p.total_avaliacoes)}
+          </div>
+        </a>
+      `).join("");
+    }
+
+    document.getElementById("f-tipo-negocio").addEventListener("change", aplicarFiltros);
+    document.getElementById("f-bairro").addEventListener("input", aplicarFiltros);
+    document.getElementById("f-busca").addEventListener("input", aplicarFiltros);
+    document.getElementById("f-ordenar").addEventListener("change", aplicarFiltros);
+
+    carregarParceiros();
+  </script>
+</body>
+</html>

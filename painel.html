@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel do parceiro · PetHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700;800&family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" />
+  <link rel="stylesheet" href="css/style.css?v=5" />
+</head>
+<body>
+  <header class="topbar" id="navbar"></header>
+
+  <main>
+    <div class="page-header">
+      <h1 id="titulo-painel">Painel do parceiro</h1>
+      <p>Gerencie seu catálogo e os pedidos recebidos.</p>
+    </div>
+
+    <div class="grid grid-3" style="margin-bottom:20px;">
+      <div class="card"><strong id="metrica-pendentes">0</strong><div style="color:var(--ink-soft);">Pedidos pendentes</div></div>
+      <div class="card"><strong id="metrica-nota">0.0 ★</strong><div style="color:var(--ink-soft);">Nota média</div></div>
+      <div class="card"><strong id="metrica-avaliacoes">0</strong><div style="color:var(--ink-soft);">Avaliações recebidas</div></div>
+    </div>
+
+    <div class="grid grid-2" style="align-items:start;">
+      <div>
+        <h2>Pedidos recebidos</h2>
+        <div id="lista-pedidos" class="card"><p class="empty-state">Carregando pedidos...</p></div>
+      </div>
+
+      <div>
+        <h2>Meus itens</h2>
+        <div class="card" style="margin-bottom:12px;">
+          <form id="form-item">
+            <div class="field-row">
+              <div>
+                <label for="item-tipo">Tipo</label>
+                <select id="item-tipo">
+                  <option value="produto">Produto</option>
+                  <option value="servico">Serviço</option>
+                </select>
+              </div>
+              <div>
+                <label for="item-preco">Preço (R$)</label>
+                <input type="number" id="item-preco" min="0" step="0.01" required />
+              </div>
+            </div>
+            <label for="item-nome">Nome</label>
+            <input type="text" id="item-nome" required placeholder="Ex: Ração Premium 10kg" />
+            <label for="item-descricao">Descrição</label>
+            <textarea id="item-descricao" placeholder="Detalhes do produto ou serviço"></textarea>
+            <label for="item-prazo">Prazo de entrega (produto) ou duração (serviço), em horas</label>
+            <input type="number" id="item-prazo" min="1" value="24" required />
+            <button type="submit" class="btn btn-primary btn-block" style="margin-top:12px;">Adicionar item</button>
+          </form>
+        </div>
+        <div id="lista-itens"></div>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="js/supabase-client.js"></script>
+  <script src="js/app.js?v=3"></script>
+  <script>
+    renderNavbar("painel");
+    let parceiro = null;
+
+    async function init() {
+      const profile = await requireAuth("parceiro");
+      if (!profile) return;
+
+      const { data, error } = await window.sb.from("parceiros").select("*").eq("profile_id", profile.id).maybeSingle();
+      if (error || !data) {
+        showToast("Cadastro de parceiro não encontrado.", "error");
+        return;
+      }
+      parceiro = data;
+      document.getElementById("titulo-painel").textContent = "Painel de " + parceiro.nome_fantasia;
+      document.getElementById("metrica-nota").textContent = (parceiro.nota_media || 0).toFixed(1) + " ★";
+      document.getElementById("metrica-avaliacoes").textContent = parceiro.total_avaliacoes || 0;
+
+      await carregarItens();
+      await carregarPedidos();
+    }
+
+    // ---------------- ITENS ----------------
+    async function carregarItens() {
+      const { data, error } = await window.sb.from("itens").select("*").eq("parceiro_id", parceiro.id).order("created_at", { ascending: false });
+      const el = document.getElementById("lista-itens");
+      if (error || !data || !data.length) {
+        el.innerHTML = `<p class="empty-state">Nenhum item cadastrado ainda.</p>`;
+        return;
+      }
+      el.innerHTML = data.map((item) => `
+        <div class="card item-card" style="margin-bottom:10px;">
+          <div class="partner-meta">
+            <span class="badge">${item.tipo === "produto" ? "Produto" : "Serviço"}</span>
+            <span class="badge ${item.disponivel ? "aceito" : "recusado"}">${item.disponivel ? "Disponível" : "Pausado"}</span>
+          </div>
+          <h4 style="margin:4px 0;">${item.nome}</h4>
+          <p style="margin:0; font-size:0.85rem; color:var(--ink-soft);">${item.descricao || ""}</p>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px;">
+            <span class="price">${formatMoney(item.preco)}</span>
+            <div style="display:flex; gap:6px;">
+              <button class="btn btn-secondary btn-toggle-item" data-id="${item.id}" data-disponivel="${item.disponivel}">
+                ${item.disponivel ? "Pausar" : "Ativar"}
+              </button>
+              <button class="btn btn-danger btn-excluir-item" data-id="${item.id}">Excluir</button>
+            </div>
+          </div>
+        </div>
+      `).join("");
+
+      document.querySelectorAll(".btn-toggle-item").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const novoValor = btn.dataset.disponivel !== "true";
+          await window.sb.from("itens").update({ disponivel: novoValor }).eq("id", btn.dataset.id);
+          carregarItens();
+        });
+      });
+      document.querySelectorAll(".btn-excluir-item").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          if (!confirm("Excluir este item?")) return;
+          await window.sb.from("itens").delete().eq("id", btn.dataset.id);
+          carregarItens();
+        });
+      });
+    }
+
+    document.getElementById("form-item").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const payload = {
+        parceiro_id: parceiro.id,
+        tipo: document.getElementById("item-tipo").value,
+        nome: document.getElementById("item-nome").value.trim(),
+        descricao: document.getElementById("item-descricao").value.trim(),
+        preco: Number(document.getElementById("item-preco").value),
+        prazo_horas: Number(document.getElementById("item-prazo").value)
+      };
+      const { error } = await window.sb.from("itens").insert(payload);
+      if (error) {
+        showToast("Erro ao adicionar item: " + error.message, "error");
+        return;
+      }
+      showToast("Item adicionado!", "success");
+      e.target.reset();
+      document.getElementById("item-prazo").value = 24;
+      carregarItens();
+    });
+
+    // ---------------- PEDIDOS ----------------
+    // Duas fontes: pedidos que este parceiro já fechou (parceiro_id = ele), e
+    // candidaturas em aberto (pedido_candidatos pendentes, oferecidas a vários
+    // parceiros ao mesmo tempo ("quem aceitar primeiro, leva").
+    async function carregarPedidos() {
+      const [fechadosRes, candidaturasRes] = await Promise.all([
+        window.sb
+          .from("pedidos")
+          .select("*, profiles!pedidos_tutor_id_fkey(nome, telefone), itens(nome), pets(nome)")
+          .eq("parceiro_id", parceiro.id)
+          .order("created_at", { ascending: false }),
+        window.sb
+          .from("pedido_candidatos")
+          .select("id, item_id, pedidos!inner(id, tipo, quantidade, horario_agendado, endereco_entrega, status, created_at, profiles!pedidos_tutor_id_fkey(nome), pets(nome)), itens(nome, preco)")
+          .eq("parceiro_id", parceiro.id)
+          .eq("status", "pendente")
+          .eq("pedidos.status", "pendente")
+          .order("created_at", { ascending: false })
+      ]);
+
+      const el = document.getElementById("lista-pedidos");
+      if (fechadosRes.error || candidaturasRes.error) {
+        el.innerHTML = `<p class="empty-state">Erro ao carregar pedidos.</p>`;
+        console.error(fechadosRes.error || candidaturasRes.error);
+        return;
+      }
+
+      const fechados = fechadosRes.data || [];
+      const candidaturas = candidaturasRes.data || [];
+      document.getElementById("metrica-pendentes").textContent = candidaturas.length;
+
+      if (!fechados.length && !candidaturas.length) {
+        el.innerHTML = `<p class="empty-state">Nenhum pedido recebido ainda.</p>`;
+        return;
+      }
+
+      const htmlCandidaturas = candidaturas.map((c) => `
+        <div class="pedido-row">
+          <div>
+            <strong>${c.itens ? c.itens.nome : "Item"}</strong>
+            <div style="font-size:0.85rem; color:var(--ink-soft);">
+              Tutor: ${c.pedidos.profiles ? c.pedidos.profiles.nome : "-"}
+              ${c.pedidos.tipo === "servico" ? " · " + (c.pedidos.pets ? c.pedidos.pets.nome : "-") + " · " + formatDateTime(c.pedidos.horario_agendado) : ""}
+              ${c.pedidos.tipo === "produto" ? " · qtd " + c.pedidos.quantidade + " · " + (c.pedidos.endereco_entrega || "") : ""}
+              · ${formatMoney((c.itens ? c.itens.preco : 0) * (c.pedidos.quantidade || 1))}
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span class="badge pendente">Novo pedido</span>
+            <button class="btn btn-primary btn-aceitar-candidatura" data-candidatura-id="${c.id}">Aceitar</button>
+            <button class="btn btn-danger btn-recusar-candidatura" data-candidatura-id="${c.id}">Recusar</button>
+          </div>
+        </div>
+      `).join("");
+
+      const htmlFechados = fechados.map((p) => `
+        <div class="pedido-row">
+          <div>
+            <strong>${p.itens ? p.itens.nome : p.nome_item}</strong>
+            <div style="font-size:0.85rem; color:var(--ink-soft);">
+              Tutor: ${p.profiles ? p.profiles.nome : "-"}
+              ${p.tipo === "servico" ? " · " + (p.pets ? p.pets.nome : "-") + " · " + formatDateTime(p.horario_agendado) : ""}
+              ${p.tipo === "produto" ? " · qtd " + p.quantidade + " · " + (p.endereco_entrega || "") : ""}
+              · ${formatMoney(p.valor_total)}
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span class="badge ${p.status}">${STATUS_LABELS[p.status] || p.status}</span>
+            ${p.status === "aceito" ? `<button class="btn btn-secondary btn-andamento" data-id="${p.id}">Iniciar atendimento</button>` : ""}
+            ${p.status === "em_andamento" ? `<button class="btn btn-secondary btn-concluir" data-id="${p.id}">Concluir</button>` : ""}
+          </div>
+        </div>
+      `).join("");
+
+      el.innerHTML = htmlCandidaturas + htmlFechados;
+
+      document.querySelectorAll(".btn-andamento").forEach((btn) => btn.addEventListener("click", () => atualizarStatus(btn.dataset.id, "em_andamento")));
+      document.querySelectorAll(".btn-concluir").forEach((btn) => btn.addEventListener("click", () => atualizarStatus(btn.dataset.id, "concluido")));
+      document.querySelectorAll(".btn-aceitar-candidatura").forEach((btn) => {
+        const candidatura = candidaturas.find((c) => c.id === btn.dataset.candidaturaId);
+        btn.addEventListener("click", () => aceitarCandidatura(candidatura));
+      });
+      document.querySelectorAll(".btn-recusar-candidatura").forEach((btn) => {
+        btn.addEventListener("click", () => recusarCandidatura(btn.dataset.candidaturaId));
+      });
+    }
+
+    async function atualizarStatus(pedidoId, status) {
+      const { error } = await window.sb.from("pedidos").update({ status }).eq("id", pedidoId);
+      if (error) {
+        showToast("Erro ao atualizar pedido: " + error.message, "error");
+        return;
+      }
+      showToast("Pedido atualizado.", "success");
+      carregarPedidos();
+    }
+
+    // Aceita a candidatura: só funciona se o pedido ainda estiver 'pendente'.
+    // Se dois parceiros clicarem quase ao mesmo tempo, só o primeiro UPDATE
+    // (que ainda encontra status='pendente') tem efeito; o RLS garante isso.
+    async function aceitarCandidatura(candidatura) {
+      if (!candidatura) return;
+      const valorTotal = (candidatura.itens ? candidatura.itens.preco : 0) * (candidatura.pedidos.quantidade || 1);
+
+      const { data, error } = await window.sb
+        .from("pedidos")
+        .update({
+          parceiro_id: parceiro.id,
+          item_id: candidatura.item_id,
+          valor_total: valorTotal,
+          status: "aceito"
+        })
+        .eq("id", candidatura.pedidos.id)
+        .eq("status", "pendente")
+        .select();
+
+      if (error) {
+        showToast("Erro ao aceitar pedido: " + error.message, "error");
+        return;
+      }
+      if (!data || !data.length) {
+        showToast("Esse pedido já foi aceito por outro parceiro.", "error");
+        carregarPedidos();
+        return;
+      }
+      showToast("Pedido aceito!", "success");
+      carregarPedidos();
+    }
+
+    // Recusar só remove este parceiro da disputa; o pedido continua em aberto
+    // para os demais candidatos (sem repasse manual, já foi oferecido a todos).
+    async function recusarCandidatura(candidaturaId) {
+      const { error } = await window.sb.from("pedido_candidatos").update({ status: "recusado" }).eq("id", candidaturaId);
+      if (error) {
+        showToast("Erro ao recusar: " + error.message, "error");
+        return;
+      }
+      showToast("Pedido recusado.", "success");
+      carregarPedidos();
+    }
+
+    init();
+  </script>
+</body>
+</html>
