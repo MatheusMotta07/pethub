@@ -9,6 +9,9 @@ atende).
 Stack: HTML/CSS/JS puro (sem build step) + [Supabase](https://supabase.com) (auth + Postgres),
 seguindo o mesmo padrão do projeto `mapa-clientes`.
 
+> Contexto completo do projeto (negócio, arquitetura, design, histórico de decisões,
+> deploy) está registrado em [`docs/00-indice.md`](docs/00-indice.md).
+
 ## Como rodar
 
 1. **Crie um projeto no Supabase** (gratuito) em https://supabase.com/dashboard.
