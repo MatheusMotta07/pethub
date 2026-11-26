@@ -16,6 +16,10 @@ meses) precisar entender *por que* o projeto é como é, não só *o que* ele fa
   projeto evoluiu, incluindo os pivots.
 - [[05-deploy-e-infraestrutura|Deploy e infraestrutura]] — onde o código e o banco
   vivem, como publicar uma mudança.
+- [[06-requisitos|Requisitos funcionais e não funcionais]] — RF e RNF levantados a
+  partir do que está implementado.
+- [[07-casos-de-teste|Casos de teste]] — casos de teste de usuário e de software,
+  com rastreabilidade para os requisitos.
 
 ## Em uma frase
 
