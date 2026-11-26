@@ -149,7 +149,11 @@
         return;
       }
       const profile = await getCurrentProfile();
-      window.location.href = profile && profile.tipo === "parceiro" ? "painel.html" : "catalogo.html";
+      const redirect = params.get("redirect");
+      const redirectSeguro = redirect && redirect.startsWith(window.location.origin + "/");
+      window.location.href = redirectSeguro
+        ? redirect
+        : (profile && profile.tipo === "parceiro" ? "painel.html" : "catalogo.html");
     });
 
     formSignup.addEventListener("submit", async (e) => {
