@@ -53,11 +53,23 @@ create table if not exists parceiros (
 );
 
 -- ====================================================================
+-- CATEGORIAS (agrupam os itens de um parceiro, ex: "Rações", "Banho e tosa")
+-- ====================================================================
+create table if not exists categorias (
+  id uuid primary key default gen_random_uuid(),
+  parceiro_id uuid not null references parceiros(id) on delete cascade,
+  nome text not null,
+  ordem int not null default 0,
+  created_at timestamptz not null default now()
+);
+
+-- ====================================================================
 -- ITENS (produtos ou serviços oferecidos por um parceiro)
 -- ====================================================================
 create table if not exists itens (
   id uuid primary key default gen_random_uuid(),
   parceiro_id uuid not null references parceiros(id) on delete cascade,
+  categoria_id uuid references categorias(id) on delete set null,
   tipo text not null check (tipo in ('produto', 'servico')),
   nome text not null,
   descricao text,
@@ -66,6 +78,21 @@ create table if not exists itens (
   disponivel boolean not null default true,
   created_at timestamptz not null default now()
 );
+
+-- ====================================================================
+-- COMPLEMENTOS (opcionais de um item, ex: "Embalagem para presente")
+-- ====================================================================
+create table if not exists complementos (
+  id uuid primary key default gen_random_uuid(),
+  item_id uuid not null references itens(id) on delete cascade,
+  nome text not null,
+  preco numeric(10,2) not null default 0,
+  disponivel boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+-- Caso o banco já exista de uma versão anterior (sem estas colunas/tabelas):
+alter table itens add column if not exists categoria_id uuid references categorias(id) on delete set null;
 
 -- ====================================================================
 -- PEDIDOS (compra de produto ou agendamento de serviço)
@@ -164,7 +191,9 @@ $$;
 alter table profiles enable row level security;
 alter table pets enable row level security;
 alter table parceiros enable row level security;
+alter table categorias enable row level security;
 alter table itens enable row level security;
+alter table complementos enable row level security;
 alter table pedidos enable row level security;
 alter table pedido_candidatos enable row level security;
 alter table avaliacoes enable row level security;
@@ -186,6 +215,18 @@ create policy "parceiros_select_all" on parceiros for select using (true);
 create policy "parceiros_insert_self" on parceiros for insert with check (auth.uid() = profile_id);
 create policy "parceiros_update_self" on parceiros for update using (auth.uid() = profile_id);
 
+-- categorias: catálogo público para leitura; só o parceiro dono cria/edita/exclui as próprias.
+create policy "categorias_select_all" on categorias for select using (true);
+create policy "categorias_insert_own" on categorias for insert with check (
+  parceiro_id in (select id from parceiros where profile_id = auth.uid())
+);
+create policy "categorias_update_own" on categorias for update using (
+  parceiro_id in (select id from parceiros where profile_id = auth.uid())
+);
+create policy "categorias_delete_own" on categorias for delete using (
+  parceiro_id in (select id from parceiros where profile_id = auth.uid())
+);
+
 -- itens: catálogo público para leitura; só o parceiro dono cria/edita os próprios itens.
 create policy "itens_select_all" on itens for select using (true);
 create policy "itens_insert_own" on itens for insert with check (
@@ -196,6 +237,18 @@ create policy "itens_update_own" on itens for update using (
 );
 create policy "itens_delete_own" on itens for delete using (
   parceiro_id in (select id from parceiros where profile_id = auth.uid())
+);
+
+-- complementos: catálogo público para leitura; só o parceiro dono do item cria/edita/exclui.
+create policy "complementos_select_all" on complementos for select using (true);
+create policy "complementos_insert_own" on complementos for insert with check (
+  item_id in (select id from itens where parceiro_id in (select id from parceiros where profile_id = auth.uid()))
+);
+create policy "complementos_update_own" on complementos for update using (
+  item_id in (select id from itens where parceiro_id in (select id from parceiros where profile_id = auth.uid()))
+);
+create policy "complementos_delete_own" on complementos for delete using (
+  item_id in (select id from itens where parceiro_id in (select id from parceiros where profile_id = auth.uid()))
 );
 
 -- pedidos: o tutor dono sempre vê; o parceiro que já fechou o pedido vê;
