@@ -213,6 +213,63 @@ async function renderNavbar(activePage) {
   }
 }
 
+// Cria um pedido "em aberto" e dispara o broadcast: acha todas as ofertas
+// (itens) desse mesmo catalogo_item_id, disponíveis, de parceiros do bairro
+// do próprio tutor (não do parceiro que o tutor calhou de visitar), e
+// notifica cada uma (pedido_candidatos). Usada tanto pelo catálogo (pedido
+// direto do item, sem escolher parceiro) quanto pela página do parceiro.
+// Lança erro com mensagem pronta pra toast; quem chama decide o que fazer
+// com o resultado (redirecionar, mostrar quantos parceiros foram notificados).
+async function criarPedidoBroadcast({
+  tutorId, tutorBairro, catalogoItemId, tipo, nomeItem, precoReferencia,
+  quantidade, enderecoEntrega, petId, horarioAgendado
+}) {
+  const payload = {
+    tutor_id: tutorId,
+    catalogo_item_id: catalogoItemId,
+    tipo,
+    nome_item: nomeItem,
+    preco_referencia: precoReferencia,
+    status: "pendente"
+  };
+  if (tipo === "produto") {
+    payload.quantidade = quantidade;
+    payload.endereco_entrega = enderecoEntrega;
+  } else {
+    payload.pet_id = petId;
+    payload.horario_agendado = horarioAgendado;
+  }
+
+  const { data: pedido, error } = await window.sb.from("pedidos").insert(payload).select().single();
+  if (error) throw new Error("Erro ao confirmar o pedido: " + error.message);
+
+  if (!tutorBairro) {
+    return { pedido, candidatosCount: 0, semBairro: true };
+  }
+
+  const { data: ofertas, error: ofertasError } = await window.sb
+    .from("itens")
+    .select("id, parceiro_id, parceiros!inner(bairro)")
+    .eq("catalogo_item_id", catalogoItemId)
+    .eq("disponivel", true)
+    .eq("parceiros.bairro", tutorBairro);
+
+  if (ofertasError) throw new Error("Pedido criado, mas houve erro ao notificar parceiros: " + ofertasError.message);
+  if (!ofertas || !ofertas.length) {
+    return { pedido, candidatosCount: 0 };
+  }
+
+  const linhasCandidatos = ofertas.map((o) => ({
+    pedido_id: pedido.id,
+    parceiro_id: o.parceiro_id,
+    item_id: o.id
+  }));
+  const { error: insertCandidatosError } = await window.sb.from("pedido_candidatos").insert(linhasCandidatos);
+  if (insertCandidatosError) throw new Error("Pedido criado, mas houve erro ao notificar parceiros: " + insertCandidatosError.message);
+
+  return { pedido, candidatosCount: linhasCandidatos.length };
+}
+
 function starString(nota) {
   const n = Math.round(Number(nota) || 0);
   return "★".repeat(n) + "☆".repeat(5 - n);

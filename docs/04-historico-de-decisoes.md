@@ -69,3 +69,22 @@ isso é assim?" sem precisar reconstruir a conversa inteira.
 
 14. **Atualização deste registro no Obsidian**, mantendo o histórico em dia conforme
     o projeto evolui (este próprio item).
+
+15. **Segundo pivot: catálogo compartilhado, pedido por item.** O usuário notou que
+    o fluxo de pedido ainda exigia escolher um parceiro específico antes de pedir
+    (entrar na página dele, escolher um item do cardápio *dele*), o que contradizia
+    o próprio modelo broadcast ("Zé Delivery": pedir o quê, não de quem). Causa raiz:
+    o casamento de parceiros elegíveis comparava texto livre de nome (`ilike`) e
+    usava o bairro do parceiro visitado, então só fazia sentido partindo da página
+    dele. A pedido do usuário, nova tabela `catalogo_itens` (catálogo compartilhado
+    da plataforma, mantido pela equipe) virou a referência: `itens` passou a
+    apontar pra ela (`catalogo_item_id`), o broadcast passou a casar por esse id e
+    pelo bairro do próprio tutor (não mais do parceiro visitado), e `catalogo.html`
+    ganhou a aba "Por item" (pede direto, sem escolher parceiro) como padrão,
+    mantendo "Por parceiro" pra quem quer ver o cardápio completo de um
+    estabelecimento. Lógica de criação do pedido consolidada numa função
+    compartilhada (`criarPedidoBroadcast` em `js/app.js`), usada por `catalogo.html`
+    e `parceiro.html`. Itens cadastrados antes dessa mudança ficam sem
+    `catalogo_item_id` até o parceiro vinculá-los manualmente no painel (editar
+    item → escolher "o que você está oferecendo"); o card do item no painel destaca
+    isso com um aviso.

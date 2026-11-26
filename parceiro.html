@@ -117,9 +117,11 @@
           <p style="margin:0; color:var(--ink-soft); font-size:0.9rem;">${item.descricao || ""}</p>
           <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
             <span class="price">${formatMoney(item.preco)}</span>
-            <button class="btn btn-primary btn-pedir" data-id="${item.id}" data-tipo="${item.tipo}" data-nome="${item.nome}" data-preco="${item.preco}">
-              ${item.tipo === "produto" ? "Pedir" : "Agendar"}
-            </button>
+            ${item.catalogo_item_id
+              ? `<button class="btn btn-primary btn-pedir" data-id="${item.id}" data-tipo="${item.tipo}" data-nome="${item.nome}" data-preco="${item.preco}" data-catalogo-item-id="${item.catalogo_item_id}">
+                  ${item.tipo === "produto" ? "Pedir" : "Agendar"}
+                </button>`
+              : `<span class="badge recusado">Indisponível pra pedido</span>`}
           </div>
         </div>
       `).join("");
@@ -166,7 +168,13 @@
         return;
       }
 
-      itemSelecionado = { id: dataset.id, tipo: dataset.tipo, nome: dataset.nome, preco: Number(dataset.preco) };
+      itemSelecionado = {
+        id: dataset.id,
+        tipo: dataset.tipo,
+        nome: dataset.nome,
+        preco: Number(dataset.preco),
+        catalogoItemId: dataset.catalogoItemId
+      };
 
       document.getElementById("box-pedido").style.display = "block";
       document.getElementById("pedido-titulo").textContent =
@@ -203,23 +211,32 @@
       const profile = await getCurrentProfile();
       if (!profile || !itemSelecionado) return;
 
-      const payload = {
-        tutor_id: profile.id,
+      if (!itemSelecionado.catalogoItemId) {
+        showToast("Este item ainda não está vinculado ao catálogo da plataforma.", "error");
+        return;
+      }
+      if (!profile.bairro) {
+        showToast("Cadastre seu bairro em \"Meu perfil\" antes de pedir.", "error");
+        return;
+      }
+
+      const dadosPedido = {
+        tutorId: profile.id,
+        tutorBairro: profile.bairro,
+        catalogoItemId: itemSelecionado.catalogoItemId,
         tipo: itemSelecionado.tipo,
-        nome_item: itemSelecionado.nome,
-        preco_referencia: itemSelecionado.preco,
-        status: "pendente"
+        nomeItem: itemSelecionado.nome,
+        precoReferencia: itemSelecionado.preco
       };
 
       if (itemSelecionado.tipo === "produto") {
-        const qtd = Number(document.getElementById("qtd").value || 1);
         const endereco = document.getElementById("endereco").value.trim();
         if (!endereco) {
           showToast("Informe o endereço de entrega.", "error");
           return;
         }
-        payload.quantidade = qtd;
-        payload.endereco_entrega = endereco;
+        dadosPedido.quantidade = Number(document.getElementById("qtd").value || 1);
+        dadosPedido.enderecoEntrega = endereco;
       } else {
         const petId = document.getElementById("pet-select").value;
         const horario = document.getElementById("horario").value;
@@ -231,46 +248,21 @@
           showToast("Escolha a data e o horário.", "error");
           return;
         }
-        payload.pet_id = petId;
-        payload.horario_agendado = new Date(horario).toISOString();
+        dadosPedido.petId = petId;
+        dadosPedido.horarioAgendado = new Date(horario).toISOString();
       }
 
-      // Cria o pedido "em aberto" (sem parceiro definido ainda).
-      const { data: pedido, error } = await window.sb.from("pedidos").insert(payload).select().single();
-      if (error) {
-        showToast("Erro ao confirmar: " + error.message, "error");
+      try {
+        const { candidatosCount } = await criarPedidoBroadcast(dadosPedido);
+        if (candidatosCount > 0) {
+          showToast(`Pedido enviado a ${candidatosCount} parceiro(s) da região!`, "success");
+        } else {
+          showToast("Pedido criado, mas nenhum parceiro elegível foi encontrado no seu bairro agora.", "error");
+        }
+      } catch (err) {
+        showToast(err.message, "error");
         return;
       }
-
-      // Acha todos os parceiros do mesmo tipo de negócio e bairro com esse item disponível,
-      // e os notifica (broadcast); quem aceitar primeiro fica com o pedido.
-      const { data: candidatos, error: candidatosError } = await window.sb
-        .from("parceiros")
-        .select("id, itens!inner(id, nome, disponivel, tipo)")
-        .eq("tipo_negocio", parceiro.tipo_negocio)
-        .eq("bairro", parceiro.bairro)
-        .eq("itens.disponivel", true)
-        .eq("itens.tipo", itemSelecionado.tipo)
-        .ilike("itens.nome", itemSelecionado.nome);
-
-      if (candidatosError || !candidatos || !candidatos.length) {
-        showToast("Pedido criado, mas nenhum parceiro elegível foi encontrado no momento.", "error");
-        setTimeout(() => (window.location.href = "meus-pedidos.html"), 900);
-        return;
-      }
-
-      const linhasCandidatos = candidatos.map((p) => ({
-        pedido_id: pedido.id,
-        parceiro_id: p.id,
-        item_id: p.itens[0].id
-      }));
-      const { error: insertCandidatosError } = await window.sb.from("pedido_candidatos").insert(linhasCandidatos);
-      if (insertCandidatosError) {
-        showToast("Erro ao notificar parceiros: " + insertCandidatosError.message, "error");
-        return;
-      }
-
-      showToast(`Pedido enviado a ${linhasCandidatos.length} parceiro(s) da região!`, "success");
       setTimeout(() => (window.location.href = "meus-pedidos.html"), 900);
     });
 

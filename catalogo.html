@@ -15,13 +15,18 @@
 
   <main>
     <div class="page-header">
-      <h1>Catálogo de parceiros em Joinville</h1>
-      <p>Compare preço, prazo e avaliação, depois clique num parceiro pra ver os itens e pedir.
+      <h1>Catálogo de Joinville</h1>
+      <p>Escolha o que você quer pedir.
         <span style="display:inline-flex; align-items:center; gap:4px; vertical-align:middle; color:var(--brass-deep);">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.3"/><path d="M7.5 8.5a6.2 6.2 0 0 0 0 7M16.5 8.5a6.2 6.2 0 0 1 0 7M4.3 5.3a10.6 10.6 0 0 0 0 13.4M19.7 5.3a10.6 10.6 0 0 1 0 13.4"/></svg>
-          Seu pedido é oferecido a todos os parceiros elegíveis da região ao mesmo tempo; quem aceitar primeiro, atende.
+          Seu pedido é oferecido a todos os parceiros elegíveis do seu bairro ao mesmo tempo; quem aceitar primeiro, atende.
         </span>
       </p>
+    </div>
+
+    <div class="toggle-group" style="max-width:320px; margin-bottom:16px;">
+      <button type="button" id="tab-por-item" class="active">Por item</button>
+      <button type="button" id="tab-por-parceiro">Por parceiro</button>
     </div>
 
     <div class="card" style="margin-bottom:20px;">
@@ -44,7 +49,7 @@
           <label for="f-busca">Buscar</label>
           <input type="text" id="f-busca" placeholder="Nome do parceiro ou item" />
         </div>
-        <div>
+        <div id="campo-ordenar">
           <label for="f-ordenar">Ordenar por</label>
           <select id="f-ordenar">
             <option value="nota">Melhor avaliados</option>
@@ -54,7 +59,31 @@
       </div>
     </div>
 
-    <div id="lista-parceiros" class="grid grid-3">
+    <div class="card" id="box-pedido" style="display:none; margin-bottom:20px;">
+      <h3 id="pedido-titulo">Fazer pedido</h3>
+      <div id="pedido-campos-produto" style="display:none;">
+        <label for="qtd">Quantidade</label>
+        <input type="number" id="qtd" min="1" value="1" />
+        <label for="endereco">Endereço de entrega</label>
+        <textarea id="endereco" placeholder="Rua, número, bairro"></textarea>
+      </div>
+      <div id="pedido-campos-servico" style="display:none;">
+        <label for="pet-select">Pet</label>
+        <select id="pet-select"></select>
+        <label for="horario">Data e horário desejado</label>
+        <input type="datetime-local" id="horario" />
+      </div>
+      <p style="margin-top:14px;">Total estimado: <strong id="pedido-total">R$ 0,00</strong></p>
+      <p class="center-note" style="margin-top:0;">Esse valor é uma referência (o preço exato depende de qual parceiro aceitar). O pedido vai pra todos os parceiros elegíveis do seu bairro; o primeiro a aceitar atende.</p>
+      <button class="btn btn-primary btn-block" id="btn-confirmar-pedido">Confirmar</button>
+      <button class="btn btn-ghost btn-block" id="btn-cancelar-pedido">Cancelar</button>
+    </div>
+
+    <div id="lista-itens-catalogo" class="grid grid-3">
+      <p class="empty-state">Carregando catálogo...</p>
+    </div>
+
+    <div id="lista-parceiros" class="grid grid-3" style="display:none;">
       <p class="empty-state">Carregando parceiros...</p>
     </div>
   </main>
@@ -66,6 +95,130 @@
   <script>
     renderNavbar("catalogo");
 
+    // ---------------- ABAS: Por item (padrão) / Por parceiro ----------------
+    let abaAtiva = "item";
+    let parceirosCarregados = false;
+
+    document.getElementById("tab-por-item").addEventListener("click", () => {
+      abaAtiva = "item";
+      document.getElementById("tab-por-item").classList.add("active");
+      document.getElementById("tab-por-parceiro").classList.remove("active");
+      document.getElementById("lista-itens-catalogo").style.display = "grid";
+      document.getElementById("lista-parceiros").style.display = "none";
+      document.getElementById("campo-ordenar").style.display = "";
+      esconderBoxPedido();
+    });
+    document.getElementById("tab-por-parceiro").addEventListener("click", () => {
+      abaAtiva = "parceiro";
+      document.getElementById("tab-por-parceiro").classList.add("active");
+      document.getElementById("tab-por-item").classList.remove("active");
+      document.getElementById("lista-parceiros").style.display = "grid";
+      document.getElementById("lista-itens-catalogo").style.display = "none";
+      esconderBoxPedido();
+      if (!parceirosCarregados) {
+        parceirosCarregados = true;
+        carregarParceiros();
+      }
+    });
+
+    // ---------------- POR ITEM (padrão): agrupa ofertas pelo item do catálogo ----------------
+    let todasOfertas = [];
+
+    async function carregarCatalogoItens() {
+      if (!window.sb) {
+        document.getElementById("lista-itens-catalogo").innerHTML =
+          `<p class="empty-state">Não foi possível conectar ao Supabase (SDK não carregou). Verifique sua internet ou o config.js.</p>`;
+        return;
+      }
+      const { data, error } = await window.sb
+        .from("itens")
+        .select("id, preco, catalogo_item_id, catalogo_itens(id, nome, tipo, tipo_negocio, categoria, descricao_padrao), parceiros!inner(id, nome_fantasia, bairro, tipo_negocio)")
+        .eq("disponivel", true)
+        .not("catalogo_item_id", "is", null);
+
+      if (error) {
+        document.getElementById("lista-itens-catalogo").innerHTML =
+          `<p class="empty-state">Não foi possível carregar o catálogo. Verifique se o Supabase está configurado (config.js).</p>`;
+        console.error(error);
+        return;
+      }
+      todasOfertas = (data || []).filter((o) => o.catalogo_itens);
+      aplicarFiltrosItensCatalogo();
+    }
+
+    function aplicarFiltrosItensCatalogo() {
+      const tipoNegocio = document.getElementById("f-tipo-negocio").value;
+      const bairro = document.getElementById("f-bairro").value.trim().toLowerCase();
+      const busca = document.getElementById("f-busca").value.trim().toLowerCase();
+      const ordenar = document.getElementById("f-ordenar").value;
+
+      const filtradas = todasOfertas.filter((o) => {
+        if (tipoNegocio && o.parceiros.tipo_negocio !== tipoNegocio) return false;
+        if (bairro && !(o.parceiros.bairro || "").toLowerCase().includes(bairro)) return false;
+        if (busca &&
+          !(o.catalogo_itens.nome || "").toLowerCase().includes(busca) &&
+          !(o.parceiros.nome_fantasia || "").toLowerCase().includes(busca)
+        ) return false;
+        return true;
+      });
+
+      const grupos = new Map();
+      filtradas.forEach((o) => {
+        const ci = o.catalogo_itens;
+        if (!grupos.has(ci.id)) grupos.set(ci.id, { catalogoItem: ci, precos: [] });
+        grupos.get(ci.id).precos.push(o.preco);
+      });
+
+      let itensAgrupados = [...grupos.values()].map((g) => ({
+        catalogoItem: g.catalogoItem,
+        minPreco: Math.min(...g.precos),
+        count: g.precos.length
+      }));
+
+      if (ordenar === "nome") {
+        itensAgrupados.sort((a, b) => a.catalogoItem.nome.localeCompare(b.catalogoItem.nome));
+      } else {
+        itensAgrupados.sort((a, b) =>
+          a.catalogoItem.categoria.localeCompare(b.catalogoItem.categoria) ||
+          a.catalogoItem.nome.localeCompare(b.catalogoItem.nome)
+        );
+      }
+
+      renderItensCatalogo(itensAgrupados);
+    }
+
+    function renderItensCatalogo(lista) {
+      const el = document.getElementById("lista-itens-catalogo");
+      if (!lista.length) {
+        el.innerHTML = `<p class="empty-state">Nenhum item encontrado com esses filtros.</p>`;
+        return;
+      }
+      el.innerHTML = lista.map(({ catalogoItem: ci, minPreco, count }) => `
+        <div class="card item-card">
+          <div class="partner-meta">
+            <span class="badge">${ci.categoria}</span>
+            <span class="badge">${ci.tipo === "produto" ? "Produto" : "Serviço"}</span>
+          </div>
+          <h4 style="margin:4px 0;">${ci.nome}</h4>
+          <p style="margin:0; color:var(--ink-soft); font-size:0.9rem;">${ci.descricao_padrao || ""}</p>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+            <div>
+              <span class="price">A partir de ${formatMoney(minPreco)}</span>
+              <div style="font-size:0.78rem; color:var(--ink-soft);">${count} parceiro(s) com esse filtro</div>
+            </div>
+            <button class="btn btn-primary btn-pedir-item" data-catalogo-item-id="${ci.id}" data-tipo="${ci.tipo}" data-nome="${ci.nome}" data-preco="${minPreco}">
+              ${ci.tipo === "produto" ? "Pedir" : "Agendar"}
+            </button>
+          </div>
+        </div>
+      `).join("");
+
+      document.querySelectorAll(".btn-pedir-item").forEach((btn) => {
+        btn.addEventListener("click", () => abrirBoxPedido(btn.dataset));
+      });
+    }
+
+    // ---------------- POR PARCEIRO (como antes): navega o cardápio completo de um parceiro ----------------
     let todosParceiros = [];
 
     async function carregarParceiros() {
@@ -86,10 +239,10 @@
         return;
       }
       todosParceiros = data || [];
-      aplicarFiltros();
+      aplicarFiltrosParceiros();
     }
 
-    function aplicarFiltros() {
+    function aplicarFiltrosParceiros() {
       const tipoNegocio = document.getElementById("f-tipo-negocio").value;
       const bairro = document.getElementById("f-bairro").value.trim().toLowerCase();
       const busca = document.getElementById("f-busca").value.trim().toLowerCase();
@@ -133,12 +286,123 @@
       `).join("");
     }
 
-    document.getElementById("f-tipo-negocio").addEventListener("change", aplicarFiltros);
-    document.getElementById("f-bairro").addEventListener("input", aplicarFiltros);
-    document.getElementById("f-busca").addEventListener("input", aplicarFiltros);
-    document.getElementById("f-ordenar").addEventListener("change", aplicarFiltros);
+    document.getElementById("f-tipo-negocio").addEventListener("change", () => { aplicarFiltrosItensCatalogo(); aplicarFiltrosParceiros(); });
+    document.getElementById("f-bairro").addEventListener("input", () => { aplicarFiltrosItensCatalogo(); aplicarFiltrosParceiros(); });
+    document.getElementById("f-busca").addEventListener("input", () => { aplicarFiltrosItensCatalogo(); aplicarFiltrosParceiros(); });
+    document.getElementById("f-ordenar").addEventListener("change", () => { aplicarFiltrosItensCatalogo(); aplicarFiltrosParceiros(); });
 
-    carregarParceiros();
+    // ---------------- Caixa de pedido (igual conceito da página do parceiro, mas a partir do item) ----------------
+    let itemSelecionado = null;
+
+    function esconderBoxPedido() {
+      document.getElementById("box-pedido").style.display = "none";
+      itemSelecionado = null;
+    }
+
+    async function abrirBoxPedido(dataset) {
+      const profile = await getCurrentProfile();
+      if (!profile) {
+        showToast("Faça login como tutor pra continuar o pedido.", "error");
+        setTimeout(() => {
+          window.location.href = "auth.html?redirect=" + encodeURIComponent(window.location.href);
+        }, 1100);
+        return;
+      }
+      if (profile.tipo !== "tutor") {
+        showToast("Só tutores podem fazer pedidos.", "error");
+        return;
+      }
+
+      itemSelecionado = {
+        catalogoItemId: dataset.catalogoItemId,
+        tipo: dataset.tipo,
+        nome: dataset.nome,
+        preco: Number(dataset.preco)
+      };
+
+      document.getElementById("box-pedido").style.display = "block";
+      document.getElementById("pedido-titulo").textContent =
+        itemSelecionado.tipo === "produto" ? "Pedir: " + itemSelecionado.nome : "Agendar: " + itemSelecionado.nome;
+
+      document.getElementById("pedido-campos-produto").style.display = itemSelecionado.tipo === "produto" ? "block" : "none";
+      document.getElementById("pedido-campos-servico").style.display = itemSelecionado.tipo === "servico" ? "block" : "none";
+
+      atualizarTotal();
+
+      if (itemSelecionado.tipo === "servico") {
+        const { data: pets } = await window.sb.from("pets").select("id, nome").eq("tutor_id", profile.id);
+        const select = document.getElementById("pet-select");
+        select.innerHTML = (pets || []).map((p) => `<option value="${p.id}">${p.nome}</option>`).join("")
+          || `<option value="">Cadastre um pet no seu perfil primeiro</option>`;
+      }
+
+      document.getElementById("box-pedido").scrollIntoView({ behavior: "smooth" });
+    }
+
+    function atualizarTotal() {
+      if (!itemSelecionado) return;
+      const qtd = itemSelecionado.tipo === "produto" ? Number(document.getElementById("qtd").value || 1) : 1;
+      document.getElementById("pedido-total").textContent = formatMoney(itemSelecionado.preco * qtd);
+    }
+    document.getElementById("qtd").addEventListener("input", atualizarTotal);
+    document.getElementById("btn-cancelar-pedido").addEventListener("click", esconderBoxPedido);
+
+    document.getElementById("btn-confirmar-pedido").addEventListener("click", async () => {
+      const profile = await getCurrentProfile();
+      if (!profile || !itemSelecionado) return;
+
+      if (!profile.bairro) {
+        showToast("Cadastre seu bairro em \"Meu perfil\" antes de pedir.", "error");
+        return;
+      }
+
+      const dadosPedido = {
+        tutorId: profile.id,
+        tutorBairro: profile.bairro,
+        catalogoItemId: itemSelecionado.catalogoItemId,
+        tipo: itemSelecionado.tipo,
+        nomeItem: itemSelecionado.nome,
+        precoReferencia: itemSelecionado.preco
+      };
+
+      if (itemSelecionado.tipo === "produto") {
+        const endereco = document.getElementById("endereco").value.trim();
+        if (!endereco) {
+          showToast("Informe o endereço de entrega.", "error");
+          return;
+        }
+        dadosPedido.quantidade = Number(document.getElementById("qtd").value || 1);
+        dadosPedido.enderecoEntrega = endereco;
+      } else {
+        const petId = document.getElementById("pet-select").value;
+        const horario = document.getElementById("horario").value;
+        if (!petId) {
+          showToast("Cadastre e selecione um pet antes de agendar.", "error");
+          return;
+        }
+        if (!horario) {
+          showToast("Escolha a data e o horário.", "error");
+          return;
+        }
+        dadosPedido.petId = petId;
+        dadosPedido.horarioAgendado = new Date(horario).toISOString();
+      }
+
+      try {
+        const { candidatosCount } = await criarPedidoBroadcast(dadosPedido);
+        if (candidatosCount > 0) {
+          showToast(`Pedido enviado a ${candidatosCount} parceiro(s) da região!`, "success");
+        } else {
+          showToast("Pedido criado, mas nenhum parceiro elegível foi encontrado no seu bairro agora.", "error");
+        }
+      } catch (err) {
+        showToast(err.message, "error");
+        return;
+      }
+      setTimeout(() => (window.location.href = "meus-pedidos.html"), 900);
+    });
+
+    carregarCatalogoItens();
   </script>
 </body>
 </html>

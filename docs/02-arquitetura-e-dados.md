@@ -23,28 +23,57 @@ fonte única de verdade — rodar inteiro em um projeto Supabase novo recria tud
   tutor; é o mesmo perfil reaproveitado em qualquer parceiro escolhido.
 - **parceiros** — pet shops, veterinários, hospedagem, cuidadores; tem
   `tipo_negocio`, `bairro`, nota média, documento (CNPJ/CRMV).
-- **categorias** — agrupam os itens de um parceiro (ex: "Rações", "Banho e tosa").
-- **itens** — produto ou serviço oferecido por um parceiro; opcionalmente pertence a
-  uma categoria (`categoria_id`, nullable).
+- **catalogo_itens** — catálogo compartilhado da plataforma (ex: "Ração para
+  Cães", "Banho e Tosa", "Consulta Veterinária Geral"), com `tipo_negocio`,
+  `tipo` (produto/serviço) e `categoria`. É mantido pela equipe direto no SQL
+  Editor (RLS só permite leitura, sem policy de escrita). Cada linha aqui é o
+  que o tutor pede no catálogo; cada parceiro cria uma ou mais **ofertas**
+  (`itens`) apontando pra uma linha daqui.
+- **categorias** — agrupam os itens de um parceiro, no cardápio *dele* (ex: ele
+  pode juntar vários itens do catálogo compartilhado numa categoria
+  "Promoções"). Diferente da `categoria` fixa em `catalogo_itens`, que é do
+  marketplace como um todo.
+- **itens** — a oferta de um parceiro pra um item do catálogo compartilhado
+  (`catalogo_item_id`, ver abaixo), com preço, descrição e prazo próprios;
+  opcionalmente pertence a uma categoria do cardápio do parceiro
+  (`categoria_id`, nullable). Um parceiro não pode ter duas ofertas pro mesmo
+  item do catálogo (`unique (parceiro_id, catalogo_item_id)`).
 - **complementos** — opcionais de um item (ex: "Embalagem para presente"), com nome,
   preço e disponibilidade próprios.
 - **pedidos** — compra de produto ou agendamento de serviço. No modelo broadcast,
   nasce **sem** `parceiro_id`/`item_id`/`valor_total` definidos (ficam `null`) — só
-  são preenchidos quando um parceiro aceita.
+  são preenchidos quando um parceiro aceita. Guarda `catalogo_item_id` (o que foi
+  pedido) desde a criação, usado pra achar os parceiros elegíveis.
 - **pedido_candidatos** — quais parceiros foram notificados de um pedido em aberto
   (uma linha por parceiro elegível), com status `pendente` ou `recusado`.
 - **avaliacoes** — nota do tutor sobre um pedido concluído; um trigger recalcula a
   nota média do parceiro e marca o pedido como `avaliado`.
 
+## Catálogo por item (não por parceiro)
+
+`catalogo.html` tem duas abas: **"Por item"** (padrão) mostra o catálogo
+compartilhado agrupado por categoria, com "a partir de R$ X" e quantos
+parceiros oferecem aquele item com os filtros atuais; **"Por parceiro"** é a
+navegação antiga, pra quem quer ver o cardápio completo de um estabelecimento
+específico. As duas levam ao mesmo fluxo de pedido (a caixa "Fazer pedido"),
+só que "por item" o tutor nunca escolhe um parceiro antes de pedir — o que é o
+próprio ponto do modelo broadcast (pedir "o quê", não "de quem").
+
 ## O modelo de despacho "broadcast"
 
 Ao criar um pedido, o tutor não escolhe um parceiro específico — o pedido fica "em
-aberto". O sistema então:
+aberto", com o `catalogo_item_id` do que foi pedido. O sistema então (função
+compartilhada `criarPedidoBroadcast` em `js/app.js`, usada tanto por
+`catalogo.html` quanto por `parceiro.html`):
 
-1. Busca todos os parceiros do mesmo `tipo_negocio` e `bairro` que têm aquele item
-   disponível.
-2. Cria uma linha em `pedido_candidatos` para cada um (todos notificados ao mesmo
-   tempo — "quem aceitar primeiro, leva").
+1. Busca todas as ofertas (`itens`) desse mesmo `catalogo_item_id`, disponíveis,
+   de parceiros do **bairro do próprio tutor** (do perfil dele, não do parceiro
+   cuja página ele calhou de visitar — antes da reformulação do catálogo
+   compartilhado, a elegibilidade comparava texto livre de nome e usava o
+   bairro do parceiro visitado, o que só funcionava bem partindo da página de
+   um parceiro).
+2. Cria uma linha em `pedido_candidatos` para cada uma (todas notificadas ao
+   mesmo tempo — "quem aceitar primeiro, leva").
 3. "Aceitar" é um `UPDATE` em `pedidos` **condicionado a `status = 'pendente'`**
    (`.eq("status", "pendente")`), preenchendo `parceiro_id`/`item_id`/`valor_total` e
    mudando o status para `aceito`.

@@ -23,9 +23,9 @@ begin
   insert into parceiros (profile_id, tipo_negocio, nome_fantasia, documento, verificado, bairro, descricao, nota_media, total_avaliacoes)
     values (v_profile_id, 'pet_shop', 'Pet Shop Amigo Fiel', '11.222.333/0001-44', true, 'América', 'Ração, petiscos e acessórios com entrega rápida.', 4.6, 12)
     returning id into v_parceiro_id;
-  insert into itens (parceiro_id, tipo, nome, descricao, preco, prazo_horas) values
-    (v_parceiro_id, 'produto', 'Ração Premium Adulto 10,1kg', 'Ração super premium para cães adultos de porte médio.', 189.90, 4),
-    (v_parceiro_id, 'produto', 'Areia Higiênica para Gatos 4kg', 'Areia aglomerante com controle de odor.', 39.90, 4);
+  insert into itens (parceiro_id, catalogo_item_id, tipo, nome, descricao, preco, prazo_horas) values
+    (v_parceiro_id, (select id from catalogo_itens where tipo_negocio = 'pet_shop' and nome = 'Ração para Cães'), 'produto', 'Ração Premium Adulto 10,1kg', 'Ração super premium para cães adultos de porte médio.', 189.90, 4),
+    (v_parceiro_id, (select id from catalogo_itens where tipo_negocio = 'pet_shop' and nome = 'Areia Higiênica'), 'produto', 'Areia Higiênica para Gatos 4kg', 'Areia aglomerante com controle de odor.', 39.90, 4);
 
   -- Veterinário exemplo
   v_profile_id := gen_random_uuid();

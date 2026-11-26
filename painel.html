@@ -47,32 +47,29 @@
       <div>
         <div class="card" style="margin-bottom:12px;">
           <h3 style="margin-top:0;">Adicionar item</h3>
+          <p style="color:var(--ink-soft); font-size:0.88rem; margin:0 0 10px;">
+            Escolha o que você está oferecendo do catálogo da plataforma; isso é o que faz seu item
+            aparecer pros tutores e entrar na disputa de um pedido em aberto da região.
+          </p>
           <form id="form-item">
+            <label for="item-catalogo-select">O que você está oferecendo</label>
+            <select id="item-catalogo-select" required>
+              <option value="">Selecione um item do catálogo</option>
+            </select>
             <div class="field-row">
               <div>
-                <label for="item-tipo">Tipo</label>
-                <select id="item-tipo">
-                  <option value="produto">Produto</option>
-                  <option value="servico">Serviço</option>
-                </select>
-              </div>
-              <div>
-                <label for="item-categoria">Categoria</label>
+                <label for="item-categoria">Categoria (seu cardápio)</label>
                 <select id="item-categoria">
                   <option value="">Sem categoria</option>
                 </select>
-              </div>
-            </div>
-            <div class="field-row">
-              <div>
-                <label for="item-nome">Nome</label>
-                <input type="text" id="item-nome" required placeholder="Ex: Ração Premium 10kg" />
               </div>
               <div>
                 <label for="item-preco">Preço (R$)</label>
                 <input type="number" id="item-preco" min="0" step="0.01" required />
               </div>
             </div>
+            <label for="item-nome">Nome (opcional, pra variação sua: marca, tamanho etc.)</label>
+            <input type="text" id="item-nome" placeholder="Ex: Ração Premium Adulto 10,1kg" />
             <label for="item-descricao">Descrição</label>
             <textarea id="item-descricao" placeholder="Detalhes do produto ou serviço"></textarea>
             <label for="item-prazo">Prazo de entrega (produto) ou duração (serviço), em horas</label>
@@ -107,9 +104,50 @@
       document.getElementById("metrica-nota").textContent = (parceiro.nota_media || 0).toFixed(1) + " ★";
       document.getElementById("metrica-avaliacoes").textContent = parceiro.total_avaliacoes || 0;
 
+      await carregarCatalogoItens();
       await carregarCategorias();
       await carregarItens();
       await carregarPedidos();
+    }
+
+    // ---------------- CATÁLOGO COMPARTILHADO ----------------
+    // Lista fixa de itens/serviços da plataforma (ver supabase-setup.sql),
+    // filtrada pro tipo de negócio deste parceiro. É nela que o parceiro
+    // escolhe o que está oferecendo; é o catalogo_item_id que faz o
+    // pedido em aberto achar esta oferta (não mais o nome digitado).
+    let catalogoCache = [];
+
+    async function carregarCatalogoItens() {
+      const { data, error } = await window.sb
+        .from("catalogo_itens")
+        .select("*")
+        .eq("tipo_negocio", parceiro.tipo_negocio)
+        .order("categoria")
+        .order("ordem");
+      if (error) {
+        console.error(error);
+        return;
+      }
+      catalogoCache = data || [];
+      document.getElementById("item-catalogo-select").innerHTML =
+        `<option value="">Selecione um item do catálogo</option>` + opcoesCatalogo();
+    }
+
+    function opcoesCatalogo(selecionadoId) {
+      const grupos = new Map();
+      catalogoCache.forEach((ci) => {
+        if (!grupos.has(ci.categoria)) grupos.set(ci.categoria, []);
+        grupos.get(ci.categoria).push(ci);
+      });
+      let html = "";
+      for (const [categoria, lista] of grupos) {
+        html += `<optgroup label="${categoria}">`;
+        html += lista.map((ci) => `
+          <option value="${ci.id}" data-tipo="${ci.tipo}" ${ci.id === selecionadoId ? "selected" : ""}>${ci.nome}</option>
+        `).join("");
+        html += `</optgroup>`;
+      }
+      return html;
     }
 
     // ---------------- CATEGORIAS ----------------
@@ -246,9 +284,14 @@
       if (editandoItemId === item.id) {
         return `
           <div class="card item-card" style="margin-bottom:10px;">
+            <label for="edit-item-catalogo-${item.id}">O que você está oferecendo</label>
+            <select id="edit-item-catalogo-${item.id}">
+              <option value="">Selecione um item do catálogo</option>
+              ${opcoesCatalogo(item.catalogo_item_id)}
+            </select>
             <div class="field-row">
               <div>
-                <label for="edit-item-nome-${item.id}">Nome</label>
+                <label for="edit-item-nome-${item.id}">Nome (opcional, pra variação sua)</label>
                 <input type="text" id="edit-item-nome-${item.id}" value="${item.nome}" />
               </div>
               <div>
@@ -256,7 +299,7 @@
                 <input type="number" id="edit-item-preco-${item.id}" min="0" step="0.01" value="${item.preco}" />
               </div>
             </div>
-            <label for="edit-item-categoria-${item.id}">Categoria</label>
+            <label for="edit-item-categoria-${item.id}">Categoria (seu cardápio)</label>
             <select id="edit-item-categoria-${item.id}">
               <option value="">Sem categoria</option>
               ${categoriasCache.map((c) => `<option value="${c.id}" ${c.id === item.categoria_id ? "selected" : ""}>${c.nome}</option>`).join("")}
@@ -278,6 +321,7 @@
           <div class="partner-meta">
             <span class="badge">${item.tipo === "produto" ? "Produto" : "Serviço"}</span>
             <span class="badge ${item.disponivel ? "aceito" : "recusado"}">${item.disponivel ? "Disponível" : "Pausado"}</span>
+            ${!item.catalogo_item_id ? `<span class="badge recusado">Sem item do catálogo vinculado</span>` : ""}
           </div>
           <h4 style="margin:4px 0;">${item.nome}</h4>
           <p style="margin:0; font-size:0.85rem; color:var(--ink-soft);">${item.descricao || ""}</p>
@@ -333,23 +377,35 @@
     }
 
     async function salvarEdicaoItem(itemId) {
-      const nome = document.getElementById(`edit-item-nome-${itemId}`).value.trim();
+      const catalogoSelect = document.getElementById(`edit-item-catalogo-${itemId}`);
+      const catalogoItemId = catalogoSelect.value || null;
+      const opcaoSelecionada = catalogoSelect.selectedOptions[0];
+      const nomeDigitado = document.getElementById(`edit-item-nome-${itemId}`).value.trim();
       const preco = Number(document.getElementById(`edit-item-preco-${itemId}`).value);
       const categoriaId = document.getElementById(`edit-item-categoria-${itemId}`).value || null;
       const descricao = document.getElementById(`edit-item-descricao-${itemId}`).value.trim();
       const prazo = Number(document.getElementById(`edit-item-prazo-${itemId}`).value);
-      if (!nome) {
-        showToast("Informe o nome do item.", "error");
+      if (!catalogoItemId) {
+        showToast("Escolha o que você está oferecendo do catálogo.", "error");
         return;
       }
 
-      const { error } = await window.sb.from("itens").update({
-        nome,
+      const item = itensCache.find((i) => i.id === itemId);
+      const payload = {
+        catalogo_item_id: catalogoItemId,
         preco,
         categoria_id: categoriaId,
         descricao,
         prazo_horas: prazo
-      }).eq("id", itemId);
+      };
+      if (opcaoSelecionada && opcaoSelecionada.value) {
+        payload.tipo = opcaoSelecionada.dataset.tipo;
+        payload.nome = nomeDigitado || opcaoSelecionada.textContent.trim();
+      } else if (item) {
+        payload.nome = nomeDigitado || item.nome;
+      }
+
+      const { error } = await window.sb.from("itens").update(payload).eq("id", itemId);
       if (error) {
         showToast("Erro ao salvar: " + error.message, "error");
         return;
@@ -464,11 +520,21 @@
 
     document.getElementById("form-item").addEventListener("submit", async (e) => {
       e.preventDefault();
+      const catalogoSelect = document.getElementById("item-catalogo-select");
+      const catalogoItemId = catalogoSelect.value;
+      if (!catalogoItemId) {
+        showToast("Escolha o que você está oferecendo do catálogo.", "error");
+        return;
+      }
+      const opcaoSelecionada = catalogoSelect.selectedOptions[0];
+      const nomeDigitado = document.getElementById("item-nome").value.trim();
+
       const payload = {
         parceiro_id: parceiro.id,
         categoria_id: document.getElementById("item-categoria").value || null,
-        tipo: document.getElementById("item-tipo").value,
-        nome: document.getElementById("item-nome").value.trim(),
+        catalogo_item_id: catalogoItemId,
+        tipo: opcaoSelecionada.dataset.tipo,
+        nome: nomeDigitado || opcaoSelecionada.textContent.trim(),
         descricao: document.getElementById("item-descricao").value.trim(),
         preco: Number(document.getElementById("item-preco").value),
         prazo_horas: Number(document.getElementById("item-prazo").value)

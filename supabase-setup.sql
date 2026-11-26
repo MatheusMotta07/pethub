@@ -53,7 +53,31 @@ create table if not exists parceiros (
 );
 
 -- ====================================================================
+-- CATALOGO_ITENS (catálogo compartilhado da plataforma: o que existe pra
+-- pedir, independente de qual parceiro oferece. Cada parceiro cria uma
+-- "oferta" em `itens` apontando pra uma linha daqui, com seu próprio
+-- preço, descrição e disponibilidade. É o que permite ao tutor pedir um
+-- item diretamente do catálogo (sem escolher parceiro antes) e ao
+-- broadcast casar o pedido entre vários parceiros sem depender de
+-- comparar texto livre de nome.
+-- ====================================================================
+create table if not exists catalogo_itens (
+  id uuid primary key default gen_random_uuid(),
+  tipo_negocio text not null check (tipo_negocio in ('pet_shop', 'veterinario', 'hospedagem', 'cuidador')),
+  tipo text not null check (tipo in ('produto', 'servico')),
+  categoria text not null,
+  nome text not null,
+  descricao_padrao text,
+  ordem int not null default 0,
+  created_at timestamptz not null default now(),
+  unique (tipo_negocio, nome)
+);
+
+-- ====================================================================
 -- CATEGORIAS (agrupam os itens de um parceiro, ex: "Rações", "Banho e tosa")
+-- Isso é só a organização do cardápio DO PARCEIRO (ex: ele pode juntar
+-- vários itens do catálogo compartilhado numa categoria "Promoções"),
+-- diferente da `categoria` fixa em catalogo_itens (que é do marketplace).
 -- ====================================================================
 create table if not exists categorias (
   id uuid primary key default gen_random_uuid(),
@@ -70,6 +94,7 @@ create table if not exists itens (
   id uuid primary key default gen_random_uuid(),
   parceiro_id uuid not null references parceiros(id) on delete cascade,
   categoria_id uuid references categorias(id) on delete set null,
+  catalogo_item_id uuid references catalogo_itens(id) on delete set null, -- a que item do catálogo compartilhado esta oferta corresponde
   tipo text not null check (tipo in ('produto', 'servico')),
   nome text not null,
   descricao text,
@@ -93,6 +118,16 @@ create table if not exists complementos (
 
 -- Caso o banco já exista de uma versão anterior (sem estas colunas/tabelas):
 alter table itens add column if not exists categoria_id uuid references categorias(id) on delete set null;
+alter table itens add column if not exists catalogo_item_id uuid references catalogo_itens(id) on delete set null;
+
+-- Um parceiro não pode ter duas ofertas pro mesmo item do catálogo (evitaria
+-- candidaturas duplicadas no broadcast); nulo ainda é permitido (item antigo
+-- sem vínculo), Postgres não considera dois nulos iguais pra unique.
+do $$
+begin
+  alter table itens add constraint itens_parceiro_catalogo_item_unique unique (parceiro_id, catalogo_item_id);
+exception when duplicate_object then null;
+end $$;
 
 -- ====================================================================
 -- PEDIDOS (compra de produto ou agendamento de serviço)
@@ -107,8 +142,9 @@ create table if not exists pedidos (
   parceiro_id uuid references parceiros(id) on delete cascade, -- preenchido só quando alguém aceita
   pet_id uuid references pets(id) on delete set null,
   item_id uuid references itens(id) on delete restrict, -- preenchido só quando alguém aceita
+  catalogo_item_id uuid references catalogo_itens(id) on delete set null, -- o que foi pedido, usado pra achar parceiros elegíveis
   tipo text not null check (tipo in ('produto', 'servico')),
-  nome_item text not null, -- nome do produto/serviço pedido, usado para achar parceiros elegíveis
+  nome_item text not null, -- nome do item pedido, só para exibição (cópia do catalogo_itens.nome)
   preco_referencia numeric(10,2), -- preço que o tutor viu ao pedir, só para exibição
   quantidade int not null default 1,
   horario_agendado timestamptz,
@@ -118,6 +154,9 @@ create table if not exists pedidos (
     check (status in ('pendente', 'aceito', 'em_andamento', 'concluido', 'avaliado', 'cancelado')),
   created_at timestamptz not null default now()
 );
+
+-- Caso o banco já exista de uma versão anterior (sem esta coluna):
+alter table pedidos add column if not exists catalogo_item_id uuid references catalogo_itens(id) on delete set null;
 
 -- ====================================================================
 -- CANDIDATOS (quais parceiros foram notificados de um pedido em aberto)
@@ -191,6 +230,7 @@ $$;
 alter table profiles enable row level security;
 alter table pets enable row level security;
 alter table parceiros enable row level security;
+alter table catalogo_itens enable row level security;
 alter table categorias enable row level security;
 alter table itens enable row level security;
 alter table complementos enable row level security;
@@ -214,6 +254,10 @@ create policy "pets_delete_own" on pets for delete using (auth.uid() = tutor_id)
 create policy "parceiros_select_all" on parceiros for select using (true);
 create policy "parceiros_insert_self" on parceiros for insert with check (auth.uid() = profile_id);
 create policy "parceiros_update_self" on parceiros for update using (auth.uid() = profile_id);
+
+-- catalogo_itens: leitura pública; é mantido pela equipe direto no SQL Editor
+-- (sem policy de insert/update/delete, não dá pra alterar pelo app).
+create policy "catalogo_itens_select_all" on catalogo_itens for select using (true);
 
 -- categorias: catálogo público para leitura; só o parceiro dono cria/edita/exclui as próprias.
 create policy "categorias_select_all" on categorias for select using (true);
@@ -324,6 +368,30 @@ drop trigger if exists trg_avaliacao_insert on avaliacoes;
 create trigger trg_avaliacao_insert
   after insert on avaliacoes
   for each row execute function atualizar_nota_parceiro();
+
+-- ====================================================================
+-- CATALOGO_ITENS: lista inicial do catálogo compartilhado da plataforma.
+-- Isso NÃO é dado de exemplo opcional (diferente de seed-exemplo.sql):
+-- é a lista de referência que todo parceiro escolhe no painel pra criar
+-- uma oferta, então faz parte do próprio schema. Pra adicionar um item
+-- novo à plataforma no futuro, é só inserir uma linha aqui (ou pelo SQL
+-- Editor) com o mesmo formato.
+-- ====================================================================
+insert into catalogo_itens (tipo_negocio, tipo, categoria, nome, descricao_padrao, ordem) values
+  ('pet_shop', 'produto', 'Rações', 'Ração para Cães', 'Ração seca para cães, ideal para o dia a dia.', 1),
+  ('pet_shop', 'produto', 'Rações', 'Ração para Gatos', 'Ração seca para gatos, ideal para o dia a dia.', 2),
+  ('pet_shop', 'produto', 'Higiene e Acessórios', 'Areia Higiênica', 'Areia aglomerante com controle de odor.', 3),
+  ('pet_shop', 'produto', 'Higiene e Acessórios', 'Petiscos', 'Petiscos e guloseimas para cães e gatos.', 4),
+  ('pet_shop', 'servico', 'Banho e Tosa', 'Banho e Tosa', 'Banho completo e tosa higiênica ou na tesoura.', 5),
+  ('veterinario', 'servico', 'Consultas', 'Consulta Veterinária Geral', 'Avaliação clínica completa com veterinário.', 1),
+  ('veterinario', 'servico', 'Vacinas', 'Pacote de Vacinação', 'Aplicação de vacina com carteira atualizada.', 2),
+  ('veterinario', 'servico', 'Exames', 'Exame de Sangue', 'Coleta e análise laboratorial.', 3),
+  ('hospedagem', 'servico', 'Hospedagem', 'Hospedagem Diária', 'Diária de hospedagem em hotel pet.', 1),
+  ('hospedagem', 'servico', 'Hospedagem', 'Hospedagem Semanal', 'Pacote de 7 diárias de hospedagem.', 2),
+  ('cuidador', 'servico', 'Passeios', 'Passeio de 30 Minutos', 'Passeio individual no bairro com acompanhamento.', 1),
+  ('cuidador', 'servico', 'Passeios', 'Passeio de 1 Hora', 'Passeio individual mais longo no bairro.', 2),
+  ('cuidador', 'servico', 'Hospedagem', 'Hospedagem na Casa do Cuidador', 'Hospedagem na casa do cuidador, com fotos diárias.', 3)
+on conflict (tipo_negocio, nome) do nothing;
 
 -- ====================================================================
 -- STORAGE: fotos de pets
