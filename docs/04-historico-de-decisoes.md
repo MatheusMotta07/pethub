@@ -61,3 +61,11 @@ isso é assim?" sem precisar reconstruir a conversa inteira.
 
 12. **Este registro no Obsidian**, consolidando todo o contexto acima em notas
     linkadas, pra não depender só do histórico de uma conversa.
+
+13. **Edição de pet estendida para todos os campos.** O que o item 9 deixou de fora
+    (editar só nome/foto) foi completado: o formulário inline de edição em "Meu
+    perfil" passou a cobrir espécie, raça, data de nascimento, vacinas, alergias e
+    rotina, espelhando o formulário de "Adicionar pet".
+
+14. **Atualização deste registro no Obsidian**, mantendo o histórico em dia conforme
+    o projeto evolui (este próprio item).
