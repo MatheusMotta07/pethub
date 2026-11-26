@@ -180,8 +180,36 @@
               <div style="display:flex; gap:12px; align-items:flex-start;">
                 ${avatarPet(pet)}
                 <div style="flex:1; min-width:0;">
-                  <label for="edit-nome-${pet.id}">Nome</label>
-                  <input type="text" id="edit-nome-${pet.id}" value="${pet.nome}" />
+                  <div class="field-row">
+                    <div>
+                      <label for="edit-nome-${pet.id}">Nome</label>
+                      <input type="text" id="edit-nome-${pet.id}" value="${pet.nome}" />
+                    </div>
+                    <div>
+                      <label for="edit-especie-${pet.id}">Espécie</label>
+                      <select id="edit-especie-${pet.id}">
+                        <option value="cachorro" ${pet.especie === "cachorro" ? "selected" : ""}>Cachorro</option>
+                        <option value="gato" ${pet.especie === "gato" ? "selected" : ""}>Gato</option>
+                        <option value="outro" ${pet.especie === "outro" ? "selected" : ""}>Outro</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="field-row">
+                    <div>
+                      <label for="edit-raca-${pet.id}">Raça</label>
+                      <input type="text" id="edit-raca-${pet.id}" value="${pet.raca || ""}" />
+                    </div>
+                    <div>
+                      <label for="edit-nascimento-${pet.id}">Data de nascimento</label>
+                      <input type="date" id="edit-nascimento-${pet.id}" value="${pet.data_nascimento || ""}" />
+                    </div>
+                  </div>
+                  <label for="edit-vacinas-${pet.id}">Vacinas</label>
+                  <textarea id="edit-vacinas-${pet.id}" placeholder="Ex: V10 em 10/2026, antirrábica em 11/2026">${pet.vacinas || ""}</textarea>
+                  <label for="edit-alergias-${pet.id}">Alergias</label>
+                  <textarea id="edit-alergias-${pet.id}" placeholder="Ex: alergia a frango">${pet.alergias || ""}</textarea>
+                  <label for="edit-rotina-${pet.id}">Rotina</label>
+                  <textarea id="edit-rotina-${pet.id}" placeholder="Ex: passeio 2x ao dia, ração às 8h e 18h">${pet.rotina || ""}</textarea>
                   <label for="edit-foto-${pet.id}">Trocar foto (opcional)</label>
                   <input type="file" id="edit-foto-${pet.id}" accept="image/*" />
                   <div style="display:flex; gap:6px; margin-top:10px;">
@@ -254,15 +282,23 @@
     }
 
     async function salvarEdicaoPet(petId) {
-      const nomeInput = document.getElementById(`edit-nome-${petId}`);
-      const nome = nomeInput.value.trim();
+      const nome = document.getElementById(`edit-nome-${petId}`).value.trim();
       if (!nome) {
         showToast("Informe o nome do pet.", "error");
         return;
       }
+      const payload = {
+        nome,
+        especie: document.getElementById(`edit-especie-${petId}`).value,
+        raca: document.getElementById(`edit-raca-${petId}`).value.trim(),
+        data_nascimento: document.getElementById(`edit-nascimento-${petId}`).value || null,
+        vacinas: document.getElementById(`edit-vacinas-${petId}`).value.trim(),
+        alergias: document.getElementById(`edit-alergias-${petId}`).value.trim(),
+        rotina: document.getElementById(`edit-rotina-${petId}`).value.trim()
+      };
+
       const fileInput = document.getElementById(`edit-foto-${petId}`);
       const file = fileInput.files[0];
-      const payload = { nome };
 
       if (file) {
         try {
