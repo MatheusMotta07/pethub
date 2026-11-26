@@ -238,77 +238,106 @@ alter table pedidos enable row level security;
 alter table pedido_candidatos enable row level security;
 alter table avaliacoes enable row level security;
 
+-- Todas as policies são recriadas (drop if exists + create) pra este script
+-- poder ser rodado de novo com segurança num projeto que já existe.
+
 -- profiles: qualquer pessoa autenticada lê perfis (precisa mostrar nome do parceiro no catálogo);
 -- só o dono edita o próprio perfil.
+drop policy if exists "profiles_select_all" on profiles;
 create policy "profiles_select_all" on profiles for select using (true);
+drop policy if exists "profiles_insert_self" on profiles;
 create policy "profiles_insert_self" on profiles for insert with check (auth.uid() = id);
+drop policy if exists "profiles_update_self" on profiles;
 create policy "profiles_update_self" on profiles for update using (auth.uid() = id);
 
 -- pets: só o tutor dono vê e edita os pets dele.
+drop policy if exists "pets_select_own" on pets;
 create policy "pets_select_own" on pets for select using (auth.uid() = tutor_id);
+drop policy if exists "pets_insert_own" on pets;
 create policy "pets_insert_own" on pets for insert with check (auth.uid() = tutor_id);
+drop policy if exists "pets_update_own" on pets;
 create policy "pets_update_own" on pets for update using (auth.uid() = tutor_id);
+drop policy if exists "pets_delete_own" on pets;
 create policy "pets_delete_own" on pets for delete using (auth.uid() = tutor_id);
 
 -- parceiros: catálogo é público para leitura; só o próprio parceiro edita seu cadastro.
+drop policy if exists "parceiros_select_all" on parceiros;
 create policy "parceiros_select_all" on parceiros for select using (true);
+drop policy if exists "parceiros_insert_self" on parceiros;
 create policy "parceiros_insert_self" on parceiros for insert with check (auth.uid() = profile_id);
+drop policy if exists "parceiros_update_self" on parceiros;
 create policy "parceiros_update_self" on parceiros for update using (auth.uid() = profile_id);
 
 -- catalogo_itens: leitura pública; é mantido pela equipe direto no SQL Editor
 -- (sem policy de insert/update/delete, não dá pra alterar pelo app).
+drop policy if exists "catalogo_itens_select_all" on catalogo_itens;
 create policy "catalogo_itens_select_all" on catalogo_itens for select using (true);
 
 -- categorias: catálogo público para leitura; só o parceiro dono cria/edita/exclui as próprias.
+drop policy if exists "categorias_select_all" on categorias;
 create policy "categorias_select_all" on categorias for select using (true);
+drop policy if exists "categorias_insert_own" on categorias;
 create policy "categorias_insert_own" on categorias for insert with check (
   parceiro_id in (select id from parceiros where profile_id = auth.uid())
 );
+drop policy if exists "categorias_update_own" on categorias;
 create policy "categorias_update_own" on categorias for update using (
   parceiro_id in (select id from parceiros where profile_id = auth.uid())
 );
+drop policy if exists "categorias_delete_own" on categorias;
 create policy "categorias_delete_own" on categorias for delete using (
   parceiro_id in (select id from parceiros where profile_id = auth.uid())
 );
 
 -- itens: catálogo público para leitura; só o parceiro dono cria/edita os próprios itens.
+drop policy if exists "itens_select_all" on itens;
 create policy "itens_select_all" on itens for select using (true);
+drop policy if exists "itens_insert_own" on itens;
 create policy "itens_insert_own" on itens for insert with check (
   parceiro_id in (select id from parceiros where profile_id = auth.uid())
 );
+drop policy if exists "itens_update_own" on itens;
 create policy "itens_update_own" on itens for update using (
   parceiro_id in (select id from parceiros where profile_id = auth.uid())
 );
+drop policy if exists "itens_delete_own" on itens;
 create policy "itens_delete_own" on itens for delete using (
   parceiro_id in (select id from parceiros where profile_id = auth.uid())
 );
 
 -- complementos: catálogo público para leitura; só o parceiro dono do item cria/edita/exclui.
+drop policy if exists "complementos_select_all" on complementos;
 create policy "complementos_select_all" on complementos for select using (true);
+drop policy if exists "complementos_insert_own" on complementos;
 create policy "complementos_insert_own" on complementos for insert with check (
   item_id in (select id from itens where parceiro_id in (select id from parceiros where profile_id = auth.uid()))
 );
+drop policy if exists "complementos_update_own" on complementos;
 create policy "complementos_update_own" on complementos for update using (
   item_id in (select id from itens where parceiro_id in (select id from parceiros where profile_id = auth.uid()))
 );
+drop policy if exists "complementos_delete_own" on complementos;
 create policy "complementos_delete_own" on complementos for delete using (
   item_id in (select id from itens where parceiro_id in (select id from parceiros where profile_id = auth.uid()))
 );
 
 -- pedidos: o tutor dono sempre vê; o parceiro que já fechou o pedido vê;
 -- e qualquer parceiro que ainda está "disputando" o pedido (candidato) também vê.
+drop policy if exists "pedidos_select_envolvidos" on pedidos;
 create policy "pedidos_select_envolvidos" on pedidos for select using (
   auth.uid() = tutor_id
   or parceiro_id in (select id from parceiros where profile_id = auth.uid())
   or eh_candidato_do_pedido(id)
 );
 
+drop policy if exists "pedidos_insert_tutor" on pedidos;
 create policy "pedidos_insert_tutor" on pedidos for insert with check (auth.uid() = tutor_id);
 
 -- update: o tutor (dono) e o parceiro que já fechou o pedido seguem o fluxo normal;
 -- além disso, QUALQUER candidato pendente pode "aceitar" (preencher parceiro_id/item_id/
 -- valor_total e mudar o status), desde que o pedido ainda esteja 'pendente': isso é o
 -- que garante que só o primeiro a aceitar vence (os demais caem porque o status já mudou).
+drop policy if exists "pedidos_update_envolvidos" on pedidos;
 create policy "pedidos_update_envolvidos" on pedidos for update using (
   auth.uid() = tutor_id
   or parceiro_id in (select id from parceiros where profile_id = auth.uid())
@@ -320,18 +349,23 @@ create policy "pedidos_update_envolvidos" on pedidos for update using (
 
 -- pedido_candidatos: cada parceiro só vê/atualiza as próprias candidaturas;
 -- o tutor (dono do pedido) pode criar uma candidatura por parceiro elegível.
+drop policy if exists "candidatos_select_own_parceiro" on pedido_candidatos;
 create policy "candidatos_select_own_parceiro" on pedido_candidatos for select using (
   parceiro_id in (select id from parceiros where profile_id = auth.uid())
 );
+drop policy if exists "candidatos_insert_tutor_dono_pedido" on pedido_candidatos;
 create policy "candidatos_insert_tutor_dono_pedido" on pedido_candidatos for insert with check (
   tutor_e_dono_do_pedido(pedido_id)
 );
+drop policy if exists "candidatos_update_own" on pedido_candidatos;
 create policy "candidatos_update_own" on pedido_candidatos for update using (
   parceiro_id in (select id from parceiros where profile_id = auth.uid())
 );
 
 -- avaliações: catálogo público para leitura (compor nota média); só o tutor do pedido avalia.
+drop policy if exists "avaliacoes_select_all" on avaliacoes;
 create policy "avaliacoes_select_all" on avaliacoes for select using (true);
+drop policy if exists "avaliacoes_insert_tutor_dono" on avaliacoes;
 create policy "avaliacoes_insert_tutor_dono" on avaliacoes for insert with check (
   pedido_id in (select id from pedidos where tutor_id = auth.uid())
 );

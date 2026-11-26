@@ -247,12 +247,15 @@ async function criarPedidoBroadcast({
     return { pedido, candidatosCount: 0, semBairro: true };
   }
 
+  // Bairro é texto livre cadastrado por cada pessoa (sem geolocalização real,
+  // ver 01-visao-geral-e-negocio.md), então "Vila Nova" e "vila nova" são o
+  // mesmo bairro pra quem pediu: comparação sem diferenciar maiúsculas.
   const { data: ofertas, error: ofertasError } = await window.sb
     .from("itens")
     .select("id, parceiro_id, parceiros!inner(bairro)")
     .eq("catalogo_item_id", catalogoItemId)
     .eq("disponivel", true)
-    .eq("parceiros.bairro", tutorBairro);
+    .ilike("parceiros.bairro", tutorBairro.trim());
 
   if (ofertasError) throw new Error("Pedido criado, mas houve erro ao notificar parceiros: " + ofertasError.message);
   if (!ofertas || !ofertas.length) {
