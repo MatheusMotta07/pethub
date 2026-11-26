@@ -30,6 +30,7 @@ create table if not exists pets (
   vacinas text,
   alergias text,
   rotina text,
+  foto_url text,
   created_at timestamptz not null default now()
 );
 
@@ -270,3 +271,25 @@ drop trigger if exists trg_avaliacao_insert on avaliacoes;
 create trigger trg_avaliacao_insert
   after insert on avaliacoes
   for each row execute function atualizar_nota_parceiro();
+
+-- ====================================================================
+-- STORAGE: fotos de pets
+-- Bucket público (leitura livre, como a anon key já é pública); upload,
+-- troca e exclusão só pelo próprio tutor, no seu próprio "fundo" de pasta
+-- (caminho salvo como "<tutor_id>/<pet_id>.jpg").
+-- ====================================================================
+insert into storage.buckets (id, name, public)
+values ('pet-fotos', 'pet-fotos', true)
+on conflict (id) do nothing;
+
+drop policy if exists "pet_fotos_insert_own" on storage.objects;
+create policy "pet_fotos_insert_own" on storage.objects for insert to authenticated
+with check (bucket_id = 'pet-fotos' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "pet_fotos_update_own" on storage.objects;
+create policy "pet_fotos_update_own" on storage.objects for update to authenticated
+using (bucket_id = 'pet-fotos' and (storage.foldername(name))[1] = auth.uid()::text);
+
+drop policy if exists "pet_fotos_delete_own" on storage.objects;
+create policy "pet_fotos_delete_own" on storage.objects for delete to authenticated
+using (bucket_id = 'pet-fotos' and (storage.foldername(name))[1] = auth.uid()::text);

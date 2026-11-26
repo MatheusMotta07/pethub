@@ -66,7 +66,21 @@ const PET_PHOTOS = [
   { src: "img/pets/coelho.jpg", alt: "Coelho de orelha caída na grama", caption: "Coelho ariete" },
   { src: "img/pets/cachorro-bulldog-frances.jpg", alt: "Filhote de bulldog francês", caption: "Bulldog francês" },
   { src: "img/pets/gato-filhote.jpg", alt: "Gatinho preto e branco cheirando uma flor", caption: "Gatinho, 2 meses" },
-  { src: "img/pets/hamster.jpg", alt: "Hamster sírio comendo pepino", caption: "Hamster sírio" }
+  { src: "img/pets/hamster.jpg", alt: "Hamster sírio comendo pepino", caption: "Hamster sírio" },
+  { src: "img/pets/cachorro-golden-retriever.jpg", alt: "Filhote de golden retriever deitado", caption: "Golden retriever" },
+  { src: "img/pets/gato-tigrado.jpg", alt: "Gato tigrado de perfil usando coleira vermelha", caption: "Gato tigrado" },
+  { src: "img/pets/tartaruga.jpg", alt: "Tartaruga de estimação sobre um tronco", caption: "Tartaruga" },
+  { src: "img/pets/cachorro-corgi.jpg", alt: "Corgi sentado na grama com a língua de fora", caption: "Corgi galês" },
+  { src: "img/pets/gato-laranja-deitado.jpg", alt: "Gato laranja deitado no chão", caption: "Gato laranja" },
+  { src: "img/pets/cachorro-labrador.jpg", alt: "Filhote de labrador branco olhando para cima", caption: "Labrador" },
+  { src: "img/pets/gato-siames.jpg", alt: "Gato siamês de olhos azuis deitado", caption: "Gato siamês" },
+  { src: "img/pets/periquito.jpg", alt: "Periquito-australiano verde em um galho", caption: "Periquito-australiano" },
+  { src: "img/pets/cachorro-chihuahua.jpg", alt: "Chihuahua no colo da tutora", caption: "Chihuahua" },
+  { src: "img/pets/gato-persa.jpg", alt: "Gato persa peludo deitado", caption: "Gato persa" },
+  { src: "img/pets/cachorro-beagle.jpg", alt: "Beagle de perfil olhando pela janela", caption: "Beagle" },
+  { src: "img/pets/gato-preto-branco.jpg", alt: "Gatinho preto e branco de olhos verdes", caption: "Gatinho de olhos verdes" },
+  { src: "img/pets/cachorro-vira-lata.jpg", alt: "Cachorro vira-lata sorridente com olhos de cores diferentes", caption: "Vira-lata, olhos diferentes" },
+  { src: "img/pets/gato-preto-branco-2.jpg", alt: "Gato preto e branco de olhos verdes em um parapeito", caption: "Gato preto e branco" }
 ];
 
 // Monta um carrossel de fotos (arraste ou use as setas) dentro de #containerId.

@@ -496,6 +496,22 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   .pet-card { width: 128px; }
 }
 
+.pet-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--line);
+  background: var(--paper-deep);
+  flex-shrink: 0;
+}
+.pet-avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-soft);
+}
+
 .auth-card { max-width: 420px; margin: 20px auto; }
 
 .pedido-row {

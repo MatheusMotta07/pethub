@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700;800&family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" />
-  <link rel="stylesheet" href="css/style.css?v=5" />
+  <link rel="stylesheet" href="css/style.css?v=6" />
 </head>
 <body>
   <header class="topbar" id="navbar"></header>
@@ -86,6 +86,8 @@
         <textarea id="pet-alergias" placeholder="Ex: alergia a frango"></textarea>
         <label for="pet-rotina">Rotina</label>
         <textarea id="pet-rotina" placeholder="Ex: passeio 2x ao dia, ração às 8h e 18h"></textarea>
+        <label for="pet-foto">Foto (opcional)</label>
+        <input type="file" id="pet-foto" accept="image/*" />
         <button type="submit" class="btn btn-primary btn-block" style="margin-top:12px;">Adicionar pet</button>
       </form>
     </div>
@@ -94,7 +96,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js"></script>
   <script src="js/supabase-client.js"></script>
-  <script src="js/app.js?v=3"></script>
+  <script src="js/app.js?v=4"></script>
   <script>
     renderNavbar("perfil");
     let profile = null;
@@ -153,27 +155,65 @@
       showToast("Dados do negócio atualizados!", "success");
     });
 
+    let editandoPetId = null;
+    let petsCache = [];
+
+    function avatarPet(pet) {
+      return pet.foto_url
+        ? `<img class="pet-avatar" src="${pet.foto_url}" alt="Foto de ${pet.nome}" />`
+        : `<div class="pet-avatar pet-avatar-placeholder">${ICONS.paw}</div>`;
+    }
+
     async function carregarPets() {
       const { data, error } = await window.sb.from("pets").select("*").eq("tutor_id", profile.id).order("created_at");
       const el = document.getElementById("lista-pets");
-      if (error || !data || !data.length) {
+      petsCache = data || [];
+      if (error || !petsCache.length) {
         el.innerHTML = `<p class="empty-state">Nenhum pet cadastrado ainda.</p>`;
         return;
       }
-      el.innerHTML = data.map((pet) => `
-        <div class="card" style="margin-bottom:10px;">
-          <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-            <div>
-              <h4 style="margin:0 0 4px;">${pet.nome} <span class="badge">${pet.especie}</span></h4>
-              <p style="margin:0; font-size:0.85rem; color:var(--ink-soft);">${pet.raca || ""} ${pet.data_nascimento ? "· nasc. " + formatDate(pet.data_nascimento) : ""}</p>
-              ${pet.vacinas ? `<p style="margin:6px 0 0; font-size:0.85rem;"><strong>Vacinas:</strong> ${pet.vacinas}</p>` : ""}
-              ${pet.alergias ? `<p style="margin:2px 0 0; font-size:0.85rem;"><strong>Alergias:</strong> ${pet.alergias}</p>` : ""}
-              ${pet.rotina ? `<p style="margin:2px 0 0; font-size:0.85rem;"><strong>Rotina:</strong> ${pet.rotina}</p>` : ""}
+
+      el.innerHTML = petsCache.map((pet) => {
+        if (editandoPetId === pet.id) {
+          return `
+            <div class="card pet-card-item" style="margin-bottom:10px;">
+              <div style="display:flex; gap:12px; align-items:flex-start;">
+                ${avatarPet(pet)}
+                <div style="flex:1; min-width:0;">
+                  <label for="edit-nome-${pet.id}">Nome</label>
+                  <input type="text" id="edit-nome-${pet.id}" value="${pet.nome}" />
+                  <label for="edit-foto-${pet.id}">Trocar foto (opcional)</label>
+                  <input type="file" id="edit-foto-${pet.id}" accept="image/*" />
+                  <div style="display:flex; gap:6px; margin-top:10px;">
+                    <button class="btn btn-primary btn-salvar-edicao" data-id="${pet.id}">Salvar</button>
+                    <button class="btn btn-ghost btn-cancelar-edicao">Cancelar</button>
+                  </div>
+                </div>
+              </div>
             </div>
-            <button class="btn btn-danger btn-excluir-pet" data-id="${pet.id}">Excluir</button>
+          `;
+        }
+        return `
+          <div class="card pet-card-item" style="margin-bottom:10px;">
+            <div style="display:flex; gap:12px;">
+              ${avatarPet(pet)}
+              <div style="flex:1; min-width:0;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap;">
+                  <h4 style="margin:0 0 4px;">${pet.nome} <span class="badge">${pet.especie}</span></h4>
+                  <div style="display:flex; gap:6px; flex-shrink:0;">
+                    <button class="btn btn-secondary btn-editar-pet" data-id="${pet.id}">Editar</button>
+                    <button class="btn btn-danger btn-excluir-pet" data-id="${pet.id}">Excluir</button>
+                  </div>
+                </div>
+                <p style="margin:0; font-size:0.85rem; color:var(--ink-soft);">${pet.raca || ""} ${pet.data_nascimento ? "· nasc. " + formatDate(pet.data_nascimento) : ""}</p>
+                ${pet.vacinas ? `<p style="margin:6px 0 0; font-size:0.85rem;"><strong>Vacinas:</strong> ${pet.vacinas}</p>` : ""}
+                ${pet.alergias ? `<p style="margin:2px 0 0; font-size:0.85rem;"><strong>Alergias:</strong> ${pet.alergias}</p>` : ""}
+                ${pet.rotina ? `<p style="margin:2px 0 0; font-size:0.85rem;"><strong>Rotina:</strong> ${pet.rotina}</p>` : ""}
+              </div>
+            </div>
           </div>
-        </div>
-      `).join("");
+        `;
+      }).join("");
 
       document.querySelectorAll(".btn-excluir-pet").forEach((btn) => {
         btn.addEventListener("click", async () => {
@@ -182,6 +222,65 @@
           carregarPets();
         });
       });
+      document.querySelectorAll(".btn-editar-pet").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          editandoPetId = btn.dataset.id;
+          carregarPets();
+        });
+      });
+      document.querySelectorAll(".btn-cancelar-edicao").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          editandoPetId = null;
+          carregarPets();
+        });
+      });
+      document.querySelectorAll(".btn-salvar-edicao").forEach((btn) => {
+        btn.addEventListener("click", () => salvarEdicaoPet(btn.dataset.id));
+      });
+    }
+
+    // Envia a foto do pet pro bucket "pet-fotos" (caminho <tutor_id>/<pet_id>-<timestamp>.ext,
+    // sempre um nome novo) e devolve a URL pública. A foto antiga fica órfã no bucket,
+    // aceitável para este protótipo.
+    async function uploadFotoPet(file, petId) {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const caminho = `${profile.id}/${petId}-${Date.now()}.${ext}`;
+      const { error } = await window.sb.storage.from("pet-fotos").upload(caminho, file, {
+        contentType: file.type || "image/jpeg"
+      });
+      if (error) throw error;
+      const { data } = window.sb.storage.from("pet-fotos").getPublicUrl(caminho);
+      return data.publicUrl;
+    }
+
+    async function salvarEdicaoPet(petId) {
+      const nomeInput = document.getElementById(`edit-nome-${petId}`);
+      const nome = nomeInput.value.trim();
+      if (!nome) {
+        showToast("Informe o nome do pet.", "error");
+        return;
+      }
+      const fileInput = document.getElementById(`edit-foto-${petId}`);
+      const file = fileInput.files[0];
+      const payload = { nome };
+
+      if (file) {
+        try {
+          payload.foto_url = await uploadFotoPet(file, petId);
+        } catch (err) {
+          showToast("Erro ao enviar foto: " + err.message, "error");
+          return;
+        }
+      }
+
+      const { error } = await window.sb.from("pets").update(payload).eq("id", petId);
+      if (error) {
+        showToast("Erro ao salvar: " + error.message, "error");
+        return;
+      }
+      showToast("Pet atualizado!", "success");
+      editandoPetId = null;
+      carregarPets();
     }
 
     document.getElementById("form-pet").addEventListener("submit", async (e) => {
@@ -196,11 +295,25 @@
         alergias: document.getElementById("pet-alergias").value.trim(),
         rotina: document.getElementById("pet-rotina").value.trim()
       };
-      const { error } = await window.sb.from("pets").insert(payload);
+      const { data: novoPet, error } = await window.sb.from("pets").insert(payload).select().single();
       if (error) {
         showToast("Erro ao adicionar pet: " + error.message, "error");
         return;
       }
+
+      const file = document.getElementById("pet-foto").files[0];
+      if (file) {
+        try {
+          const fotoUrl = await uploadFotoPet(file, novoPet.id);
+          await window.sb.from("pets").update({ foto_url: fotoUrl }).eq("id", novoPet.id);
+        } catch (err) {
+          showToast("Pet cadastrado, mas a foto não pôde ser enviada: " + err.message, "error");
+          e.target.reset();
+          carregarPets();
+          return;
+        }
+      }
+
       showToast("Pet cadastrado!", "success");
       e.target.reset();
       carregarPets();
